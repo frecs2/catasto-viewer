@@ -121,16 +121,15 @@ const center = ol.proj.transform([8.73, 45.25], "EPSG:4326", "EPSG:25832");
 /* =========================================
    2) LAYER WMS CATASTO (AGENZIA ENTRATE)
    ========================================= */
+
 const wmsLayer = new ol.layer.Tile({
-  source: new ol.source.TileWMS({
- const wmsLayer = new ol.layer.Tile({
   source: new ol.source.TileWMS({
     url: "https://catastovisual.princifranci.workers.dev/",
     params: {
       SERVICE: "WMS",
       VERSION: "1.3.0",
       REQUEST: "GetMap",
-      LAYERS: "CP.CadastralParcel",
+      LAYERS: "CP.CadastralZoning,acque,strade,CP.CadastralParcel,fabbricati,codice_plla,simbolo_graffa",
       STYLES: "",
       FORMAT: "image/png",
       TRANSPARENT: true,
@@ -425,6 +424,7 @@ document.getElementById("fileImport").addEventListener("change", async (e) => {
 </script>
 </body>
 </html>
+
 
 
 
