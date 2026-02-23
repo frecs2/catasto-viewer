@@ -120,20 +120,29 @@
     const projection = ol.proj.get("EPSG:25832");
     const center = ol.proj.transform([9.19,45.46], "EPSG:4326", "EPSG:25832");
 
-    const wmsLayer = new ol.layer.Tile({
-      source: new ol.source.TileWMS({
-        url: "https://wms.cartografia.agenziaentrate.gov.it/inspire/wms/ows01.php",
-        params: {
-          "SERVICE": "WMS",
-          "VERSION": "1.3.0",
-          "REQUEST": "GetMap",
-          "LAYERS": "CP.CadastralParcel",
-          "FORMAT": "image/png",
-          "TRANSPARENT": true
-        },
-        crossOrigin: "anonymous"
-      })
-    });
+    const wmsSource = new ol.source.TileWMS({
+  url: "https://wms.cartografia.agenziaentrate.gov.it/inspire/wms/ows01.php",
+  params: {
+    SERVICE: "WMS",
+    VERSION: "1.3.0",
+    REQUEST: "GetMap",
+    LAYERS: "CP.CadastralParcel",
+    STYLES: "default",
+    FORMAT: "image/png",
+    TRANSPARENT: true,
+    CRS: "EPSG:25832"
+  },
+  serverType: "mapserver",
+  crossOrigin: "anonymous",
+  transition: 0
+});
+
+const wmsLayer = new ol.layer.Tile({
+  source: wmsSource
+});
+
+// utile per capire subito perché vedi bianco
+wmsSource.on("tileloaderror", (e) => console.error("WMS tile load error", e));
 
     // Layer PF (persistenti)
     const pfSource = new ol.source.Vector();
@@ -490,3 +499,4 @@
   </script>
 </body>
 </html>
+
