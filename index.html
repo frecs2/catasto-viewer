@@ -1,56 +1,492 @@
 <!doctype html>
 <html>
 <head>
-<meta charset="utf-8">
-<title>Catasto UTM 25832</title>
+  <meta charset="utf-8" />
+  <title>Catasto UTM 25832</title>
 
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@latest/dist/ol.css">
-<script src="https://cdn.jsdelivr.net/npm/ol@latest/dist/ol.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/proj4@2.9.0/dist/proj4.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/ol@latest/proj/proj4.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@latest/dist/ol.css">
 
-<style>
-html, body { margin:0; height:100%; }
-#map { width:100%; height:100%; }
-</style>
-</head>
-<body>
+  <style>
+    html, body { margin:0; height:100%; font-family: Arial, Helvetica, sans-serif; }
+    #map { width:100%; height:100%; }
 
-<div id="map"></div>
-
-<script>
-
-// definizione EPSG:25832
-proj4.defs("EPSG:25832","+proj=utm +zone=32 +ellps=GRS80 +units=m +no_defs");
-ol.proj.proj4.register(proj4);
-
-const projection = ol.proj.get("EPSG:25832");
-
-// centro Milano convertito in UTM 25832
-const center = ol.proj.transform([9.19,45.46],"EPSG:4326","EPSG:25832");
-
-const wmsLayer = new ol.layer.Tile({
-  source: new ol.source.TileWMS({
-    url: "https://wms.cartografia.agenziaentrate.gov.it/inspire/wms/ows01.php",
-    params: {
-      "LAYERS": "CP.CadastralParcel",
-      "VERSION": "1.3.0"
+    /* toolbar */
+    .toolbar {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 9999;
+      background: rgba(255,255,255,0.95);
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 10px;
+      width: 360px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.12);
     }
-  })
-});
+    .row { display: flex; gap: 8px; margin-bottom: 8px; }
+    .row input { flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 6px; }
+    .row button { padding: 8px 10px; border: 1px solid #ccc; background: #f7f7f7; border-radius: 6px; cursor: pointer; }
+    .row button.active { border-color: #2b6cb0; background: #e8f0ff; }
+    .small { font-size: 12px; color: #444; line-height: 1.35; }
+    .pf-list {
+      max-height: 180px;
+      overflow: auto;
+      border: 1px solid #eee;
+      border-radius: 6px;
+      padding: 6px;
+      background: #fff;
+    }
+    .pf-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 6px;
+      border-bottom: 1px solid #f1f1f1;
+      font-size: 13px;
+    }
+    .pf-item:last-child { border-bottom: none; }
+    .pf-item .name { font-weight: 600; }
+    .pf-item .meta { font-size: 11px; color: #666; }
+    .pf-item button { padding: 4px 8px; font-size: 12px; }
+    .hint { font-size: 12px; color: #666; margin-top: 6px; }
+  </style>
+</head>
 
-const map = new ol.Map({
-  target: "map",
-  layers: [wmsLayer],
-  view: new ol.View({
-    projection: projection,
-    center: center,
-    zoom: 17,
-    minZoom: 10,
-    maxZoom: 22
-  })
-});
+<body>
+  <div id="map"></div>
 
-</script>
+  <div class="toolbar">
+    <div class="row">
+      <input id="searchBox" placeholder="Cerca comune/indirizzo (es. “Mortara”, “Via Torino 1 Milano”)" />
+      <button id="searchBtn">Cerca</button>
+    </div>
+
+    <div class="row">
+      <button id="loginBtn">Login</button>
+      <button id="addPfBtn">Aggiungi PF</button>
+      <button id="drawPolyBtn">Disegna poligono</button>
+      <button id="clearTempBtn">Pulisci disegni</button>
+    </div>
+
+    <div class="small">
+      - <b>PF</b> = persistenti (salvati su cloud).<br>
+      - <b>Linee/triangoli/poligoni</b> = temporanei (spariscono al refresh).<br>
+      - Per fare un triangolo: seleziona 3 PF (click sui marker).
+    </div>
+
+    <div class="hint"><b>PF salvati</b></div>
+    <div id="pfList" class="pf-list"></div>
+  </div>
+
+  <!-- OpenLayers + proj4 -->
+  <script src="https://cdn.jsdelivr.net/npm/ol@latest/dist/ol.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/proj4@2.9.0/dist/proj4.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ol@latest/proj/proj4.js"></script>
+
+  <!-- Firebase (modular v9) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+    import {
+      getFirestore, collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+    import {
+      getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut
+    } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+
+    /***********************
+     * 1) Firebase config
+     * Compilalo dal tuo progetto Firebase (non è un "segreto")
+     ***********************/
+    const firebaseConfig = {
+      apiKey: "INCOLLA_QUI",
+      authDomain: "INCOLLA_QUI",
+      projectId: "INCOLLA_QUI",
+      storageBucket: "INCOLLA_QUI",
+      messagingSenderId: "INCOLLA_QUI",
+      appId: "INCOLLA_QUI"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+
+    /***********************
+     * 2) Proiezione / mappa
+     ***********************/
+    proj4.defs("EPSG:25832","+proj=utm +zone=32 +ellps=GRS80 +units=m +no_defs");
+    ol.proj.proj4.register(proj4);
+
+    const projection = ol.proj.get("EPSG:25832");
+    const center = ol.proj.transform([9.19,45.46], "EPSG:4326", "EPSG:25832");
+
+    const wmsLayer = new ol.layer.Tile({
+      source: new ol.source.TileWMS({
+        url: "https://wms.cartografia.agenziaentrate.gov.it/inspire/wms/ows01.php",
+        params: {
+          "SERVICE": "WMS",
+          "VERSION": "1.3.0",
+          "REQUEST": "GetMap",
+          "LAYERS": "CP.CadastralParcel",
+          "FORMAT": "image/png",
+          "TRANSPARENT": true
+        },
+        crossOrigin: "anonymous"
+      })
+    });
+
+    // Layer PF (persistenti)
+    const pfSource = new ol.source.Vector();
+    const pfLayer = new ol.layer.Vector({
+      source: pfSource,
+      style: (feature) => {
+        const name = feature.get("name") || "";
+        const selected = feature.get("selected") === true;
+
+        return new ol.style.Style({
+          image: new ol.style.Circle({
+            radius: selected ? 7 : 6,
+            fill: new ol.style.Fill({ color: selected ? "#2b6cb0" : "#111" }),
+            stroke: new ol.style.Stroke({ color: "#fff", width: 2 })
+          }),
+          text: new ol.style.Text({
+            text: name,
+            offsetY: -16,
+            font: "bold 12px Arial",
+            fill: new ol.style.Fill({ color: "#111" }),
+            stroke: new ol.style.Stroke({ color: "#fff", width: 3 })
+          })
+        });
+      }
+    });
+
+    // Layer disegni temporanei (linee/poligoni)
+    const tempSource = new ol.source.Vector();
+    const tempLayer = new ol.layer.Vector({
+      source: tempSource,
+      style: new ol.style.Style({
+        stroke: new ol.style.Stroke({ color: "#d11", width: 2 }),
+        fill: new ol.style.Fill({ color: "rgba(209,17,17,0.15)" })
+      })
+    });
+
+    const map = new ol.Map({
+      target: "map",
+      layers: [wmsLayer, tempLayer, pfLayer],
+      view: new ol.View({
+        projection,
+        center,
+        zoom: 17,
+        minZoom: 10,
+        maxZoom: 22
+      })
+    });
+
+    /***********************
+     * 3) UI state
+     ***********************/
+    const pfListEl = document.getElementById("pfList");
+    const addPfBtn = document.getElementById("addPfBtn");
+    const drawPolyBtn = document.getElementById("drawPolyBtn");
+    const clearTempBtn = document.getElementById("clearTempBtn");
+    const loginBtn = document.getElementById("loginBtn");
+    const searchBox = document.getElementById("searchBox");
+    const searchBtn = document.getElementById("searchBtn");
+
+    let addPfMode = false;
+    let drawInteraction = null;
+    let currentUser = null;
+
+    function setBtnActive(btn, active) {
+      if (active) btn.classList.add("active");
+      else btn.classList.remove("active");
+    }
+
+    function stopDrawInteraction() {
+      if (drawInteraction) {
+        map.removeInteraction(drawInteraction);
+        drawInteraction = null;
+      }
+      setBtnActive(drawPolyBtn, false);
+    }
+
+    function setAddPfMode(on) {
+      addPfMode = on;
+      setBtnActive(addPfBtn, on);
+      if (on) stopDrawInteraction();
+    }
+
+    function clearTempDrawings() {
+      tempSource.clear();
+    }
+
+    clearTempBtn.addEventListener("click", () => clearTempDrawings());
+
+    addPfBtn.addEventListener("click", () => {
+      setAddPfMode(!addPfMode);
+    });
+
+    drawPolyBtn.addEventListener("click", () => {
+      setAddPfMode(false);
+      if (drawInteraction) {
+        stopDrawInteraction();
+        return;
+      }
+      drawInteraction = new ol.interaction.Draw({
+        source: tempSource,
+        type: "Polygon"
+      });
+      map.addInteraction(drawInteraction);
+      setBtnActive(drawPolyBtn, true);
+    });
+
+    /***********************
+     * 4) Auth (per “solo io posso aggiungere PF”)
+     ***********************/
+    async function doLogin() {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    }
+    async function doLogout() {
+      await signOut(auth);
+    }
+
+    loginBtn.addEventListener("click", async () => {
+      if (currentUser) await doLogout();
+      else await doLogin();
+    });
+
+    onAuthStateChanged(auth, (user) => {
+      currentUser = user || null;
+      loginBtn.textContent = currentUser ? "Logout" : "Login";
+    });
+
+    /***********************
+     * 5) Firestore - PF persistenti
+     ***********************/
+    async function loadPFs() {
+      pfSource.clear();
+      pfListEl.innerHTML = "";
+
+      const snap = await getDocs(collection(db, "pf"));
+      snap.forEach((d) => {
+        const data = d.data();
+        const lon = data.lon;
+        const lat = data.lat;
+
+        const coords25832 = ol.proj.transform([lon, lat], "EPSG:4326", "EPSG:25832");
+        const f = new ol.Feature({
+          geometry: new ol.geom.Point(coords25832),
+          name: data.name || "",
+          selected: false
+        });
+        f.setId(d.id);
+        pfSource.addFeature(f);
+      });
+
+      renderPfList();
+    }
+
+    async function addPF(name, coordinate25832) {
+      if (!currentUser) {
+        alert("Devi fare Login per aggiungere PF.");
+        return;
+      }
+
+      const [lon, lat] = ol.proj.transform(coordinate25832, "EPSG:25832", "EPSG:4326");
+      await addDoc(collection(db, "pf"), {
+        name,
+        lon,
+        lat,
+        createdAt: serverTimestamp()
+      });
+
+      await loadPFs();
+    }
+
+    async function removePF(featureId) {
+      if (!currentUser) {
+        alert("Devi fare Login per eliminare PF.");
+        return;
+      }
+      await deleteDoc(doc(db, "pf", featureId));
+      await loadPFs();
+      clearTempDrawings();
+    }
+
+    function renderPfList() {
+      const feats = pfSource.getFeatures().slice().sort((a,b) => {
+        const an = (a.get("name") || "").toLowerCase();
+        const bn = (b.get("name") || "").toLowerCase();
+        return an.localeCompare(bn);
+      });
+
+      pfListEl.innerHTML = "";
+      for (const f of feats) {
+        const id = f.getId();
+        const name = f.get("name") || "(senza nome)";
+        const selected = f.get("selected") === true;
+
+        const row = document.createElement("div");
+        row.className = "pf-item";
+
+        const left = document.createElement("div");
+        left.style.cursor = "pointer";
+        left.innerHTML = `<div class="name">${selected ? "✅ " : ""}${escapeHtml(name)}</div>
+                          <div class="meta">id: ${escapeHtml(String(id))}</div>`;
+
+        left.addEventListener("click", () => {
+          toggleSelectFeature(f);
+          renderPfList();
+        });
+
+        const del = document.createElement("button");
+        del.textContent = "Elimina";
+        del.addEventListener("click", () => removePF(id));
+
+        row.appendChild(left);
+        row.appendChild(del);
+        pfListEl.appendChild(row);
+      }
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/[&<>"']/g, (m) => ({
+        "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+      }[m]));
+    }
+
+    /***********************
+     * 6) Selezione PF + triangolo/linee temporanei
+     ***********************/
+    function toggleSelectFeature(f) {
+      f.set("selected", !(f.get("selected") === true));
+      pfLayer.changed(); // refresh stile
+      drawTempFromSelection();
+    }
+
+    function getSelectedPF() {
+      return pfSource.getFeatures().filter(f => f.get("selected") === true);
+    }
+
+    function drawTempFromSelection() {
+      // Cancella SOLO le geometrie “triangolo/linee” create automaticamente
+      // Mantiene eventuali poligoni disegnati a mano (drawInteraction)
+      const keep = [];
+      tempSource.getFeatures().forEach(ft => {
+        if (ft.get("kind") !== "auto") keep.push(ft);
+      });
+      tempSource.clear();
+      keep.forEach(ft => tempSource.addFeature(ft));
+
+      const sel = getSelectedPF();
+      if (sel.length < 2) return;
+
+      const coords = sel.map(f => f.getGeometry().getCoordinates());
+
+      if (sel.length === 2) {
+        const line = new ol.Feature({
+          geometry: new ol.geom.LineString(coords),
+          kind: "auto"
+        });
+        tempSource.addFeature(line);
+        return;
+      }
+
+      // 3 o più: chiude poligono usando l'ordine di selezione “casuale”.
+      // Se vuoi un ordine “intelligente” (es. convesso), si può aggiungere dopo.
+      const ring = coords.concat([coords[0]]);
+      const poly = new ol.Feature({
+        geometry: new ol.geom.Polygon([ring]),
+        kind: "auto"
+      });
+      tempSource.addFeature(poly);
+    }
+
+    /***********************
+     * 7) Click mappa: aggiungi PF (persistente) / seleziona PF
+     ***********************/
+    map.on("singleclick", async (evt) => {
+      // se clicco su un PF: selezione
+      const hit = map.forEachFeatureAtPixel(evt.pixel, (feature, layer) => {
+        if (layer === pfLayer) return feature;
+        return null;
+      });
+
+      if (hit) {
+        toggleSelectFeature(hit);
+        renderPfList();
+        return;
+      }
+
+      // altrimenti: se sono in modalità aggiunta PF
+      if (!addPfMode) return;
+
+      const name = prompt("Nome PF (personalizzato):");
+      if (!name || !name.trim()) return;
+
+      await addPF(name.trim(), evt.coordinate);
+    });
+
+    /***********************
+     * 8) Ricerca comune/indirizzo (Nominatim)
+     ***********************/
+    async function geocodeAndZoom(q) {
+      const query = (q || "").trim();
+      if (!query) return;
+
+      // Nominatim: attenzione ai limiti, usare con moderazione
+      const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}&countrycodes=it`;
+      const res = await fetch(url, {
+        headers: { "Accept": "application/json" }
+      });
+      if (!res.ok) {
+        alert("Errore ricerca.");
+        return;
+      }
+      const data = await res.json();
+      if (!data.length) {
+        alert("Nessun risultato.");
+        return;
+      }
+      const lon = parseFloat(data[0].lon);
+      const lat = parseFloat(data[0].lat);
+
+      const to25832 = ol.proj.transform([lon, lat], "EPSG:4326", "EPSG:25832");
+      map.getView().animate({ center: to25832, zoom: 17, duration: 450 });
+    }
+
+    searchBtn.addEventListener("click", () => geocodeAndZoom(searchBox.value));
+    searchBox.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") geocodeAndZoom(searchBox.value);
+    });
+
+    /***********************
+     * 9) Avvio
+     ***********************/
+    await loadPFs();
+
+    /***********************************************************************
+     * IMPORTANTISSIMO (regole Firestore):
+     *
+     * Se vuoi che SOLO TU possa scrivere/cancellare PF:
+     * - abilita Google Auth nel progetto Firebase
+     * - prendi il tuo UID (lo vedi in Firebase Auth dopo login)
+     * - imposta queste regole (Firestore Rules):
+     *
+     * rules_version = '2';
+     * service cloud.firestore {
+     *   match /databases/{database}/documents {
+     *     match /pf/{docId} {
+     *       allow read: if true;
+     *       allow write: if request.auth != null
+     *                    && request.auth.uid == "IL_TUO_UID";
+     *     }
+     *   }
+     * }
+     *
+     * Così chiunque vede i PF, ma SOLO tu li puoi aggiungere/eliminare.
+     ***********************************************************************/
+  </script>
 </body>
 </html>
