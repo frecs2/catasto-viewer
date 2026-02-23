@@ -1,237 +1,56 @@
 <!doctype html>
-<html lang="it">
+<html>
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Catasto (solo immagine) + Punti</title>
+<meta charset="utf-8">
+<title>Catasto UTM 25832</title>
 
-  <!-- Leaflet -->
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-    crossorigin=""
-  />
-  <script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-    crossorigin=""
-  ></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@latest/dist/ol.css">
+<script src="https://cdn.jsdelivr.net/npm/ol@latest/dist/ol.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/proj4@2.9.0/dist/proj4.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/ol@latest/proj/proj4.js"></script>
 
-  <!-- Leaflet Draw (per aggiungere/modificare punti) -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"/>
-  <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
-
-  <style>
-    html, body { height: 100%; margin: 0; }
-    #map { height: 100%; width: 100%; }
-    .toolbar {
-      position: absolute; z-index: 9999;
-      top: 10px; left: 10px;
-      background: rgba(255,255,255,0.95);
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      padding: 10px;
-      font: 14px/1.3 system-ui, -apple-system, Segoe UI, Roboto, Arial;
-      max-width: 320px;
-    }
-    .toolbar button, .toolbar input[type="file"] {
-      width: 100%;
-      margin: 6px 0;
-    }
-    .small { font-size: 12px; color: #444; }
-  </style>
+<style>
+html, body { margin:0; height:100%; }
+#map { width:100%; height:100%; }
+</style>
 </head>
-
 <body>
-  <div id="map"></div>
 
-  <div class="toolbar">
-    <div><strong>Punti di riferimento</strong></div>
-    <div class="small">Aggiungi/modifica/cancella con i tool sulla mappa (a sinistra).</div>
-    <button id="btnExport">Esporta GeoJSON</button>
-    <input id="fileImport" type="file" accept=".json,.geojson,application/geo+json" />
-    <button id="btnClear">Svuota punti (solo locali)</button>
-    <div class="small">
-      Salvataggio: <code>localStorage</code> del browser (gratis, senza server).<br/>
-      Se vuoi condivisione tra più persone serve un backend (anche free-tier).
-    </div>
-  </div>
+<div id="map"></div>
 
-  <script>
-    // --- MAPPA BASE "VUOTA" (nessuna Google, nessun OSM) ---
-    const blank = L.gridLayer({
-      attribution: ''
-    });
+<script>
 
-    // Centro iniziale (Milano circa) e zoom iniziale
-    const map = L.map('map', {
-      center: [45.4642, 9.1900],
-      zoom: 16,
-      layers: [blank]
-    });
+// definizione EPSG:25832
+proj4.defs("EPSG:25832","+proj=utm +zone=32 +ellps=GRS80 +units=m +no_defs");
+ol.proj.proj4.register(proj4);
 
-    // --- WMS CATASTO (solo immagine) ---
-    // IMPORTANTISSIMO: NON impostare crossOrigin qui.
-    const wmsUrl = "https://wms.cartografia.agenziaentrate.gov.it/inspire/wms/ows01.php";
+const projection = ol.proj.get("EPSG:25832");
 
-    const catasto = L.tileLayer.wms(wmsUrl, {
-      layers: "Particelle",          // se non va, vedi nota sotto "Se non vedi nulla"
-      format: "image/png",
-      transparent: true,
-      version: "1.3.0",
-      attribution: 'Cartografia catastale via WMS (Agenzia delle Entrate)'
-    }).addTo(map);
+// centro Milano convertito in UTM 25832
+const center = ol.proj.transform([9.19,45.46],"EPSG:4326","EPSG:25832");
 
-    // --- PUNTI (Leaflet Draw) ---
-    const STORAGE_KEY = "punti_riferimento_geojson_v1";
-
-    const pointsLayer = L.featureGroup().addTo(map);
-
-    // Controlli draw: solo marker (punti)
-    const drawControl = new L.Control.Draw({
-      position: 'topleft',
-      draw: {
-        polyline: false,
-        polygon: false,
-        rectangle: false,
-        circle: false,
-        circlemarker: false,
-        marker: true
-      },
-      edit: {
-        featureGroup: pointsLayer
-      }
-    });
-    map.addControl(drawControl);
-
-    function savePointsToLocalStorage() {
-      const geojson = pointsLayer.toGeoJSON();
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(geojson));
+const wmsLayer = new ol.layer.Tile({
+  source: new ol.source.TileWMS({
+    url: "https://wms.cartografia.agenziaentrate.gov.it/inspire/wms/ows01.php",
+    params: {
+      "LAYERS": "CP.CadastralParcel",
+      "VERSION": "1.3.0"
     }
+  })
+});
 
-    function loadPointsFromLocalStorage() {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      try {
-        const gj = JSON.parse(raw);
-        L.geoJSON(gj, {
-          onEachFeature: (feature, layer) => {
-            // popup con nome/nota se presente
-            const props = feature.properties || {};
-            const title = props.title ? `<strong>${escapeHtml(props.title)}</strong><br/>` : '';
-            const note  = props.note  ? `${escapeHtml(props.note)}<br/>` : '';
-            layer.bindPopup(`${title}${note}<span class="small">Click destro (o tool edit) per modificare</span>`);
-          }
-        }).eachLayer(l => pointsLayer.addLayer(l));
-      } catch(e) {
-        console.warn("GeoJSON non valido in localStorage", e);
-      }
-    }
+const map = new ol.Map({
+  target: "map",
+  layers: [wmsLayer],
+  view: new ol.View({
+    projection: projection,
+    center: center,
+    zoom: 17,
+    minZoom: 10,
+    maxZoom: 22
+  })
+});
 
-    function escapeHtml(s) {
-      return String(s).replace(/[&<>"']/g, m => ({
-        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-      }[m]));
-    }
-
-    // Eventi draw
-    map.on(L.Draw.Event.CREATED, (e) => {
-      const layer = e.layer;
-
-      // Chiedi un titolo/nota (facoltativi)
-      const title = prompt("Nome punto (facoltativo):", "") || "";
-      const note  = prompt("Nota (facoltativa):", "") || "";
-
-      // Salva in properties dentro GeoJSON
-      layer.feature = layer.feature || { type: "Feature", properties: {} };
-      layer.feature.properties = layer.feature.properties || {};
-      layer.feature.properties.title = title.trim();
-      layer.feature.properties.note  = note.trim();
-
-      if (title || note) {
-        layer.bindPopup(
-          `${title ? `<strong>${escapeHtml(title)}</strong><br/>` : ''}${note ? `${escapeHtml(note)}<br/>` : ''}`
-        );
-      }
-
-      pointsLayer.addLayer(layer);
-      savePointsToLocalStorage();
-    });
-
-    map.on('draw:edited', () => savePointsToLocalStorage());
-    map.on('draw:deleted', () => savePointsToLocalStorage());
-
-    // Export GeoJSON
-    document.getElementById("btnExport").addEventListener("click", () => {
-      const geojson = pointsLayer.toGeoJSON();
-      const blob = new Blob([JSON.stringify(geojson, null, 2)], { type: "application/geo+json" });
-      const url = URL.createObjectURL(blob);
-
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "punti_riferimento.geojson";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    });
-
-    // Import GeoJSON
-    document.getElementById("fileImport").addEventListener("change", async (ev) => {
-      const file = ev.target.files && ev.target.files[0];
-      if (!file) return;
-
-      const text = await file.text();
-      try {
-        const gj = JSON.parse(text);
-        pointsLayer.clearLayers();
-        L.geoJSON(gj, {
-          onEachFeature: (feature, layer) => {
-            const props = feature.properties || {};
-            const title = props.title ? `<strong>${escapeHtml(props.title)}</strong><br/>` : '';
-            const note  = props.note  ? `${escapeHtml(props.note)}<br/>` : '';
-            layer.bindPopup(`${title}${note}`);
-          }
-        }).eachLayer(l => pointsLayer.addLayer(l));
-
-        savePointsToLocalStorage();
-        alert("Import completato.");
-      } catch (e) {
-        alert("File non valido (non è GeoJSON).");
-      }
-      ev.target.value = "";
-    });
-
-    // Clear
-    document.getElementById("btnClear").addEventListener("click", () => {
-      if (!confirm("Vuoi cancellare tutti i punti salvati localmente?")) return;
-      pointsLayer.clearLayers();
-      localStorage.removeItem(STORAGE_KEY);
-    });
-
-    // Carica punti salvati
-    loadPointsFromLocalStorage();
-
-    // Extra: click destro su un punto per modificare titolo/nota (semplice)
-    pointsLayer.on('contextmenu', (ev) => {
-      const layer = ev.layer;
-      const feature = layer.feature || { type:"Feature", properties:{} };
-      feature.properties = feature.properties || {};
-
-      const title = prompt("Modifica Nome punto:", feature.properties.title || "") || "";
-      const note  = prompt("Modifica Nota:", feature.properties.note || "") || "";
-
-      feature.properties.title = title.trim();
-      feature.properties.note  = note.trim();
-      layer.feature = feature;
-
-      const html = `${title ? `<strong>${escapeHtml(title)}</strong><br/>` : ''}${note ? `${escapeHtml(note)}<br/>` : ''}`;
-      if (html) layer.bindPopup(html);
-
-      savePointsToLocalStorage();
-    });
-  </script>
+</script>
 </body>
 </html>
-
