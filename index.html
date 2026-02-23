@@ -2,26 +2,23 @@
 <html lang="it">
 <head>
   <meta charset="utf-8" />
-  <title>Catasto Pro - Pulito & Funzionante</title>
+  <title>Catasto Pro - Fix Slider Definitivo</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@latest/dist/ol.css">
   <script src="https://cdn.jsdelivr.net/npm/ol@latest/dist/ol.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/proj4@2.9.0/dist/proj4.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/ol@latest/proj/proj4.js"></script>
 
   <style>
-    html, body { margin:0; height:100%; overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; }
+    html, body { margin:0; height:100%; overflow: hidden; font-family: sans-serif; }
     #map { width:100%; height:100%; background: #ffffff; }
 
-    /* Barra Superiore */
     .top-bar {
       position: absolute; top: 0; left: 0; right: 0; height: 50px;
       background: #2c3e50; display: flex; align-items: center;
-      padding: 0 20px; color: white; z-index: 1001; box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+      padding: 0 20px; color: white; z-index: 1001;
     }
-    .slider-box { display: flex; align-items: center; gap: 12px; flex-grow: 1; max-width: 500px; }
-    input[type=range] { flex-grow: 1; cursor: pointer; }
-
-    /* Overlay Login */
+    .slider-box { display: flex; align-items: center; gap: 12px; width: 100%; max-width: 500px; }
+    
     #login-overlay {
       position: fixed; inset: 0; background: rgba(0,0,0,0.85);
       display: flex; align-items: center; justify-content: center; z-index: 2000;
@@ -29,26 +26,19 @@
     .login-box { background: white; padding: 30px; border-radius: 12px; text-align: center; width: 280px; }
     .login-box input { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
 
-    /* Pannello Laterale */
     .panel {
       position: absolute; top: 60px; left: 10px; background: rgba(255,255,255,0.95);
       padding: 15px; border-radius: 8px; box-shadow: 0 2px 15px rgba(0,0,0,0.2);
-      width: 270px; z-index: 1000; max-height: 85vh; overflow-y: auto;
+      width: 270px; z-index: 1000;
     }
 
     .section { background: #f8f9fa; padding: 10px; border-radius: 6px; margin-bottom: 12px; border: 1px solid #e0e0e0; }
-    .section h4 { margin: 0 0 8px 0; font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
-    .filter-item { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 6px; cursor: pointer; }
+    .filter-item { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 6px; }
 
-    .row { display:flex; gap:6px; margin-bottom:8px; }
-    button { cursor:pointer; padding: 8px; border: 1px solid #ccc; border-radius: 4px; flex: 1; font-size: 12px; background: white; }
-    button:hover { background: #f0f0f0; }
-
-    .btn-report { background: #fff3cd; color: #856404; font-weight: bold; border-color: #ffeeba; }
-    .btn-admin { background: #f8d7da; color: #721c24; display: none; font-weight: bold; border-color: #f5c6cb; }
+    button { cursor:pointer; padding: 8px; border: 1px solid #ccc; border-radius: 4px; background: white; font-size: 12px; }
     
-    #info-box { margin-top: 10px; padding: 10px; background: #e9ecef; border-radius: 6px; font-size: 13px; display: none; border-left: 5px solid #007bff; }
-    #coords-info { position: absolute; bottom: 10px; right: 10px; background: white; padding: 5px 10px; font-family: monospace; font-size: 12px; border: 1px solid #ccc; border-radius: 4px; }
+    #info-box { margin-top: 10px; padding: 10px; background: #e9ecef; border-radius: 6px; display: none; border-left: 5px solid #007bff; }
+    #coords-info { position: absolute; bottom: 10px; right: 10px; background: white; padding: 5px; font-family: monospace; font-size: 12px; border: 1px solid #ccc; }
   </style>
 </head>
 
@@ -56,21 +46,19 @@
 
   <div id="login-overlay">
     <div class="login-box">
-      <h2 style="margin-top:0">Accedi</h2>
+      <h2 style="margin-top:0">Accesso</h2>
       <input type="text" id="username" placeholder="Username">
       <input type="password" id="password" placeholder="Password">
-      <button onclick="login()" style="background: #007bff; color: white; border: none; padding: 12px;">ENTRA</button>
-      <p style="font-size:10px; color:#999; margin-top:10px;">Admin: admin / admin</p>
+      <button onclick="login()" style="background: #007bff; color: white; border: none; width: 100%; padding: 10px;">ENTRA</button>
     </div>
   </div>
 
   <div class="top-bar">
     <div class="slider-box">
       <span>Trasparenza Catasto:</span>
-      <input type="range" id="opacitySlider" min="0" max="1" step="0.1" value="1">
-      <span id="op-label" style="min-width:40px">100%</span>
+      <input type="range" id="opacitySlider" min="0" max="1" step="0.05" value="1">
+      <span id="op-label">100%</span>
     </div>
-    <span id="user-display" style="font-weight:bold; color:#f1c40f;"></span>
   </div>
 
   <div id="map"></div>
@@ -78,39 +66,32 @@
 
   <div class="panel">
     <div class="section">
-      <h4>Visualizza Elementi</h4>
-      <label class="filter-item"><input type="checkbox" class="layer-chk" value="fabbricati" checked> Fabbricati (Arancio)</label>
-      <label class="filter-item"><input type="checkbox" class="layer-chk" value="particelle" checked> Particelle & Numeri</label>
-      <label class="filter-item"><input type="checkbox" class="layer-chk" value="strade,acque" checked> Strade e Acque</label>
+      <h4 style="margin:0 0 8px 0; font-size:12px;">FILTRI LAYER</h4>
+      <label class="filter-item"><input type="checkbox" class="layer-chk" value="fabbricati" checked> Fabbricati</label>
+      <label class="filter-item"><input type="checkbox" class="layer-chk" value="particelle" checked> Particelle</label>
+      <label class="filter-item"><input type="checkbox" class="layer-chk" value="strade,acque" checked> Strade/Acque</label>
     </div>
 
-    <div class="row">
-        <input id="qComune" placeholder="Cerca comune..." style="flex:2; padding: 5px;">
-        <button id="btnComune" style="flex:0.5;">Vai</button>
+    <div style="display:flex; gap:5px; margin-bottom:10px;">
+        <input id="qComune" placeholder="Cerca comune..." style="flex:1; padding:5px;">
+        <button id="btnComune">Vai</button>
     </div>
     
-    <button id="btnModePF" style="width:100%; margin-bottom:8px; background:#e7f3ff;">Modalità PF: <strong>ON</strong></button>
+    <button id="btnModePF" style="width:100%; background:#e7f3ff;">Inserimento PF: <strong>ON</strong></button>
 
     <div id="info-box">
-        <strong>Punto Selezionato:</strong><br>
-        <span id="pf-name" style="font-size:15px; font-weight:bold;">-</span><br>
-        <small>Autore: </small><span id="pf-author">-</span><br>
-        <div id="pf-status" style="color:#d9534f; font-weight:bold; margin:5px 0;"></div>
-        <div class="row">
-            <button class="btn-report" onclick="reportPF()">⚠️ Segnala</button>
-            <button id="btnDel" class="btn-admin" onclick="deletePF()">🗑️ Elimina</button>
+        <span id="pf-name" style="font-weight:bold;"></span><br>
+        <small id="pf-author"></small>
+        <div id="pf-status" style="color:red; font-size:11px;"></div>
+        <div style="display:flex; gap:5px; margin-top:10px;">
+            <button onclick="reportPF()" style="background:#fff3cd;">Segnala</button>
+            <button id="btnDel" style="background:#f8d7da; display:none;" onclick="deletePF()">Elimina</button>
         </div>
-    </div>
-
-    <div style="height:1px; background:#ddd; margin:10px 0;"></div>
-    <div class="row">
-        <button onclick="tempSource.clear()">Reset Disegni</button>
-        <button id="btnExport">Export JSON</button>
     </div>
   </div>
 
 <script>
-/* 1. CONFIGURAZIONE TECNICA */
+/* 1. SETUP */
 proj4.defs("EPSG:25832","+proj=utm +zone=32 +ellps=GRS80 +units=m +no_defs");
 ol.proj.proj4.register(proj4);
 const projection = ol.proj.get("EPSG:25832");
@@ -125,18 +106,15 @@ function login() {
     currentUser = u;
     if(u === "admin" && p === "admin") {
         isAdmin = true;
-        document.querySelectorAll('.btn-admin').forEach(b => b.style.display = 'block');
+        document.getElementById('btnDel').style.display = 'block';
     }
     document.getElementById("login-overlay").style.display = "none";
-    document.getElementById("user-display").textContent = "Utente: " + currentUser;
 }
 
-/* 2. LAYER MAPPA */
-// Sfondo PULITO senza icone (CartoDB Positron)
+/* 2. LAYERS */
 const baseLayer = new ol.layer.Tile({
   source: new ol.source.XYZ({
-    url: 'https://{a-c}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-    attributions: '© OpenStreetMap contributors, © CartoDB'
+    url: 'https://{a-c}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'
   })
 });
 
@@ -146,17 +124,18 @@ const wmsSource = new ol.source.TileWMS({
   crossOrigin: "anonymous"
 });
 
-const wmsLayer = new ol.layer.Tile({ source: wmsSource, opacity: 1 });
+// DEFINIAMO IL LAYER IN UNA COSTANTE CHIARA
+const catastalLayer = new ol.layer.Tile({
+  source: wmsSource,
+  opacity: 1
+});
 
 const pfSource = new ol.source.Vector();
-const tempSource = new ol.source.Vector();
-
 const map = new ol.Map({
   target: "map",
   layers: [
     baseLayer, 
-    wmsLayer, 
-    new ol.layer.Vector({ source: tempSource, style: new ol.style.Style({ stroke: new ol.style.Stroke({ color: "#007bff", width: 3 }) }) }),
+    catastalLayer, 
     new ol.layer.Vector({ source: pfSource, style: (f) => new ol.style.Style({
         image: new ol.style.Circle({ radius: 8, fill: new ol.style.Fill({ color: f.get("reported") ? "#ffc107" : "#dc3545" }), stroke: new ol.style.Stroke({ color: "#fff", width: 2 }) }),
         text: new ol.style.Text({ font: "bold 12px Arial", offsetY: -18, text: f.get("name"), fill: new ol.style.Fill({ color: "#000" }), stroke: new ol.style.Stroke({ color: "#fff", width: 3 }) })
@@ -165,12 +144,18 @@ const map = new ol.Map({
   view: new ol.View({ projection: projection, center: ol.proj.transform([9.19, 45.46], "EPSG:4326", "EPSG:25832"), zoom: 17 })
 });
 
-/* 3. GESTIONE SLIDER & FILTRI */
-document.getElementById('opacitySlider').addEventListener('input', function() {
-    wmsLayer.setOpacity(parseFloat(this.value));
-    document.getElementById('op-label').textContent = Math.round(this.value * 100) + "%";
+/* 3. FIX SLIDER - LOGICA RINFORZATA */
+const slider = document.getElementById('opacitySlider');
+const label = document.getElementById('op-label');
+
+slider.addEventListener('input', function() {
+    const val = parseFloat(this.value);
+    // Applichiamo l'opacità direttamente al layer catastale
+    catastalLayer.setOpacity(val);
+    label.textContent = Math.round(val * 100) + "%";
 });
 
+/* 4. FILTRI LAYER */
 function updateLayers() {
     let layers = ["province", "comuni", "fogli"];
     document.querySelectorAll('.layer-chk:checked').forEach(c => layers.push(c.value));
@@ -178,46 +163,35 @@ function updateLayers() {
 }
 document.querySelectorAll('.layer-chk').forEach(c => c.addEventListener('change', updateLayers));
 
-/* 4. LOGICA PF */
+/* 5. LOGICA PF */
 let pfMode = true;
 let selected = null;
 
 document.getElementById("btnModePF").addEventListener("click", function() {
     pfMode = !pfMode;
-    this.innerHTML = `Modalità PF: <strong>${pfMode ? 'ON' : 'OFF'}</strong>`;
+    this.innerHTML = `Inserimento PF: <strong>${pfMode ? 'ON' : 'OFF'}</strong>`;
 });
 
 map.on("singleclick", (e) => {
     let f = map.forEachFeatureAtPixel(e.pixel, feature => feature);
-    if(f && f.get("author")) {
+    if(f) {
         selected = f;
         document.getElementById("info-box").style.display = "block";
         document.getElementById("pf-name").textContent = f.get("name");
-        document.getElementById("pf-author").textContent = f.get("author");
-        document.getElementById("pf-status").textContent = f.get("reported") ? "⚠️ SEGNALATO ERRATO" : "";
+        document.getElementById("pf-author").textContent = "Autore: " + f.get("author");
+        document.getElementById("pf-status").textContent = f.get("reported") ? "⚠️ SEGNALATO" : "";
     } else if(pfMode) {
         const n = prompt("Nome PF:");
         if(!n) return;
         const feat = new ol.Feature({ geometry: new ol.geom.Point(e.coordinate), name: n, author: currentUser, reported: false });
-        feat.setId(crypto.randomUUID());
         pfSource.addFeature(feat);
     }
 });
 
-function reportPF() { 
-    if(selected && confirm("Segnalare errore?")) { 
-        selected.set("reported", true); 
-        document.getElementById("pf-status").textContent = "⚠️ SEGNALATO ERRATO"; 
-    } 
-}
-function deletePF() { 
-    if(isAdmin && selected && confirm("Eliminare?")) { 
-        pfSource.removeFeature(selected); 
-        document.getElementById("info-box").style.display = "none"; 
-    } 
-}
+function reportPF() { if(selected) { selected.set("reported", true); document.getElementById("pf-status").textContent = "⚠️ SEGNALATO"; } }
+function deletePF() { if(isAdmin && selected) { pfSource.removeFeature(selected); document.getElementById("info-box").style.display = "none"; } }
 
-/* 5. UTILS */
+/* 6. UTILS */
 document.getElementById("btnComune").addEventListener("click", async () => {
   const q = document.getElementById("qComune").value;
   const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}&countrycodes=it`);
