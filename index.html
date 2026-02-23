@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Catasto - PF locali</title>
+  <title>Catasto - Gestione PF Locali</title>
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@latest/dist/ol.css">
   <script src="https://cdn.jsdelivr.net/npm/ol@latest/dist/ol.js"></script>
@@ -11,41 +11,62 @@
   <script src="https://cdn.jsdelivr.net/npm/ol@latest/proj/proj4.js"></script>
 
   <style>
-    html, body { margin:0; height:100%; }
+    html, body { margin:0; height:100%; overflow: hidden; }
     #map { width:100%; height:100%; }
 
-    /* pannello comandi semplice */
+    /* Pannello comandi */
     .panel {
       position: absolute;
-      top: 100px;
+      top: 10px;
       left: 10px;
       background: rgba(255,255,255,0.95);
-      padding: 10px;
+      padding: 12px;
       border-radius: 8px;
       box-shadow: 0 2px 10px rgba(0,0,0,0.15);
       font-family: Arial, sans-serif;
       font-size: 13px;
       max-width: 340px;
+      z-index: 1000;
     }
     .row { display:flex; gap:6px; margin-bottom:6px; }
     .row > * { flex: 1; }
-    input, button {
-      padding: 6px 8px;
-      font-size: 13px;
-    }
-    button { cursor:pointer; }
-    .small { font-size:12px; opacity:0.85; }
+    input, button { padding: 8px; font-size: 13px; border: 1px solid #ccc; border-radius: 4px; }
+    button { cursor:pointer; background: #fdfdfd; transition: background 0.2s; }
+    button:hover { background: #f0f0f0; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    
+    .btn-danger { background: #ffeeee; border-color: #ffcccc; color: #cc0000; font-weight: bold; }
+    .btn-danger:hover { background: #ffdddd; }
+    
     .hr { height:1px; background:#ddd; margin:8px 0; }
-    .status { margin-top:6px; font-size:12px; color:#333; }
+    .status { margin-top:6px; font-size:12px; color:#444; font-weight: bold; min-height: 1.2em; }
+    .small { font-size:11px; opacity:0.7; margin-top: 5px; line-height: 1.3; }
+    
+    /* Coordinate in basso a destra */
+    #coords-info {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      background: rgba(255,255,255,0.85);
+      padding: 5px 10px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      pointer-events: none;
+      border: 1px solid #bbb;
+      z-index: 1000;
+      box-shadow: 0 1px 5px rgba(0,0,0,0.1);
+    }
   </style>
 </head>
 
 <body>
   <div id="map"></div>
+  <div id="coords-info">UTM32N -> X: - | Y: -</div>
 
   <div class="panel">
     <div class="row">
-      <input id="qComune" placeholder="Cerca comune (es. Milano)" />
+      <input id="qComune" placeholder="Cerca comune (es. Mortara)" />
       <button id="btnComune">Vai</button>
     </div>
 
@@ -61,443 +82,342 @@
       <button id="btnStopDraw" disabled>Stop disegno</button>
     </div>
 
+    <div class="hr"></div>
+
     <div class="row">
-      <button id="btnConnect">Collega PF selezionati</button>
+      <button id="btnConnect">Collega selezionati</button>
       <button id="btnClearSel">Svuota selezione</button>
+    </div>
+    <div class="row">
+      <button id="btnDeletePF" class="btn-danger">Elimina selezionati</button>
     </div>
 
     <div class="hr"></div>
 
     <div class="row">
-      <button id="btnExport">Esporta PF</button>
+      <button id="btnExport">Esporta PF (JSON)</button>
       <button id="btnImport">Importa PF</button>
     </div>
     <input id="fileImport" type="file" accept="application/json" style="display:none" />
 
     <div class="status" id="status"></div>
     <div class="small">
-      PF permanenti = salvati nel browser. Disegni/linee = temporanei (spariscono al refresh).
+      I PF sono salvati automaticamente nel browser.<br>
+      Linee e poligoni sono temporanei.
     </div>
   </div>
 
 <script>
-/* =========================
-   1) PROIEZIONE EPSG:25832
-   ========================= */
+/* =========================================
+   1) CONFIGURAZIONE PROIEZIONE EPSG:25832
+   ========================================= */
 proj4.defs("EPSG:25832","+proj=utm +zone=32 +ellps=GRS80 +units=m +no_defs");
 ol.proj.proj4.register(proj4);
-
 const projection = ol.proj.get("EPSG:25832");
 
-// centro Milano (lon/lat -> UTM32N)
-const center = ol.proj.transform([9.19, 45.46], "EPSG:4326", "EPSG:25832");
+// Centro iniziale (Mortara)
+const center = ol.proj.transform([8.73, 45.25], "EPSG:4326", "EPSG:25832");
 
-/* =========================
-   2) LAYER WMS CATASTO
-   ========================= */
+/* =========================================
+   2) LAYER WMS CATASTO (AGENZIA ENTRATE)
+   ========================================= */
 const wmsLayer = new ol.layer.Tile({
   source: new ol.source.TileWMS({
     url: "https://catastovisual.princifranci.workers.dev/",
-    params: {
-      "SERVICE": "WMS",
-      "VERSION": "1.3.0",
-      "REQUEST": "GetMap",
-      "LAYERS": "CP.CadastralParcel",
-      "FORMAT": "image/png",
-      "TRANSPARENT": true
+    params: { 
+      "SERVICE": "WMS", 
+      "VERSION": "1.3.0", 
+      "REQUEST": "GetMap", 
+      "LAYERS": "CP.CadastralParcel", 
+      "FORMAT": "image/png", 
+      "TRANSPARENT": true 
     },
     crossOrigin: "anonymous"
   })
 });
 
-/* =========================
-   3) STILI
-   ========================= */
-const pfStyle = new ol.style.Style({
-  image: new ol.style.Circle({
-    radius: 6,
-    fill: new ol.style.Fill({ color: "rgba(220,0,0,0.9)" }),
-    stroke: new ol.style.Stroke({ color: "#fff", width: 2 })
+/* =========================================
+   3) STILI GRAFICI
+   ========================================= */
+const pfStyle = (feature) => new ol.style.Style({
+  image: new ol.style.Circle({ 
+    radius: 6, 
+    fill: new ol.style.Fill({ color: "rgba(220,0,0,0.9)" }), 
+    stroke: new ol.style.Stroke({ color: "#fff", width: 2 }) 
   }),
-  text: new ol.style.Text({
-    font: "12px Arial",
-    offsetY: -14,
-    fill: new ol.style.Fill({ color: "#111" }),
-    stroke: new ol.style.Stroke({ color: "rgba(255,255,255,0.9)", width: 3 })
+  text: new ol.style.Text({ 
+    font: "bold 12px Arial", 
+    offsetY: -15, 
+    text: feature.get("name"), 
+    fill: new ol.style.Fill({ color: "#000" }), 
+    stroke: new ol.style.Stroke({ color: "#fff", width: 3 }) 
   })
 });
 
-function stylePF(feature){
-  const name = feature.get("name") || "";
-  const s = pfStyle.clone();
-  s.getText().setText(name);
-  return s;
-}
-
-const selectedPFStyle = new ol.style.Style({
-  image: new ol.style.Circle({
-    radius: 7,
-    fill: new ol.style.Fill({ color: "rgba(0,120,255,0.95)" }),
-    stroke: new ol.style.Stroke({ color: "#fff", width: 2 })
+const selectedPFStyle = (feature) => new ol.style.Style({
+  image: new ol.style.Circle({ 
+    radius: 8, 
+    fill: new ol.style.Fill({ color: "#0078ff" }), 
+    stroke: new ol.style.Stroke({ color: "#fff", width: 2 }) 
   }),
-  text: new ol.style.Text({
-    font: "12px Arial",
-    offsetY: -14,
-    fill: new ol.style.Fill({ color: "#111" }),
-    stroke: new ol.style.Stroke({ color: "rgba(255,255,255,0.9)", width: 3 })
+  text: new ol.style.Text({ 
+    font: "bold 12px Arial", 
+    offsetY: -15, 
+    text: feature.get("name"), 
+    fill: new ol.style.Fill({ color: "#0078ff" }), 
+    stroke: new ol.style.Stroke({ color: "#fff", width: 3 }) 
   })
 });
-function styleSelectedPF(feature){
-  const name = feature.get("name") || "";
-  const s = selectedPFStyle.clone();
-  s.getText().setText(name);
-  return s;
-}
 
-const tempStyle = new ol.style.Style({
-  stroke: new ol.style.Stroke({ color: "rgba(255,0,0,0.95)", width: 2 }),
-  fill: new ol.style.Fill({ color: "rgba(255,0,0,0.15)" })
-});
-
-/* =========================
-   4) SORGENTI: PF (persistenti) + TEMP (disegni)
-   ========================= */
+/* =========================================
+   4) SORGENTI DATI E LAYER
+   ========================================= */
 const pfSource = new ol.source.Vector();
-const pfLayer = new ol.layer.Vector({
-  source: pfSource,
-  style: stylePF
+const pfLayer = new ol.layer.Vector({ source: pfSource, style: pfStyle });
+
+const selectedSource = new ol.source.Vector();
+const selectedLayer = new ol.layer.Vector({ source: selectedSource, style: selectedPFStyle });
+
+const tempSource = new ol.source.Vector();
+const tempLayer = new ol.layer.Vector({ 
+  source: tempSource, 
+  style: new ol.style.Style({ 
+    stroke: new ol.style.Stroke({ color: "red", width: 2.5 }), 
+    fill: new ol.style.Fill({ color: "rgba(255,0,0,0.15)" }) 
+  }) 
 });
 
-const selectedSource = new ol.source.Vector(); // solo per evidenziare selezionati
-const selectedLayer = new ol.layer.Vector({
-  source: selectedSource,
-  style: styleSelectedPF
-});
-
-const tempSource = new ol.source.Vector(); // linee/poligoni temporanei
-const tempLayer = new ol.layer.Vector({
-  source: tempSource,
-  style: tempStyle
-});
-
-/* =========================
-   5) MAPPA
-   ========================= */
+/* =========================================
+   5) INIZIALIZZAZIONE MAPPA
+   ========================================= */
 const map = new ol.Map({
   target: "map",
   layers: [wmsLayer, tempLayer, pfLayer, selectedLayer],
-  view: new ol.View({
-    projection: projection,
-    center: center,
-    zoom: 17,
-    minZoom: 10,
-    maxZoom: 22
+  view: new ol.View({ 
+    projection: projection, 
+    center: center, 
+    zoom: 17, 
+    minZoom: 6, 
+    maxZoom: 22 
   })
 });
 
 const statusEl = document.getElementById("status");
+const coordsEl = document.getElementById("coords-info");
 function setStatus(msg){ statusEl.textContent = msg || ""; }
 
-/* =========================
-   6) STORAGE PF (LOCALSTORAGE)
-   =========================
-   Nota: tu dicevi "coordinate non servono".
-   Però per disegnarli sulla mappa DEVONO esistere.
-   Le salviamo ma non te ne devi occupare.
-*/
+// Coordinate al muovere del mouse
+map.on('pointermove', function (evt) {
+  if (evt.dragging) return;
+  const coords = evt.coordinate;
+  if (coords) {
+    coordsEl.innerHTML = `UTM32N -> X: ${coords[0].toFixed(2)} | Y: ${coords[1].toFixed(2)}`;
+  }
+});
+
+/* =========================================
+   6) GESTIONE PERSISTENZA (LOCAL STORAGE)
+   ========================================= */
 const LS_KEY = "catasto_pf_v1";
 
 function loadPF(){
   pfSource.clear();
   selectedSource.clear();
-
   const raw = localStorage.getItem(LS_KEY);
-  if(!raw){
-    setStatus("PF salvati: 0");
-    return;
-  }
-  let arr;
-  try { arr = JSON.parse(raw); } catch(e){ arr = []; }
-
-  if(!Array.isArray(arr)) arr = [];
-
-  for(const it of arr){
-    if(!it || typeof it !== "object") continue;
-    if(!it.name || !it.x || !it.y) continue;
-
-    const f = new ol.Feature({
-      geometry: new ol.geom.Point([it.x, it.y]),
-      name: it.name
+  if(!raw) return;
+  try {
+    const arr = JSON.parse(raw);
+    arr.forEach(it => {
+      const f = new ol.Feature({ geometry: new ol.geom.Point([it.x, it.y]), name: it.name });
+      f.setId(it.id || crypto.randomUUID());
+      pfSource.addFeature(f);
     });
-    f.setId(it.id || crypto.randomUUID());
-    pfSource.addFeature(f);
-  }
-  setStatus(`PF salvati: ${pfSource.getFeatures().length}`);
+    setStatus(`PF caricati: ${arr.length}`);
+  } catch(e) { console.error("Errore caricamento", e); }
 }
 
 function savePF(){
-  const feats = pfSource.getFeatures();
-  const arr = feats.map(f => {
+  const arr = pfSource.getFeatures().map(f => {
     const c = f.getGeometry().getCoordinates();
-    return { id: f.getId() || crypto.randomUUID(), name: f.get("name"), x: c[0], y: c[1] };
+    return { id: f.getId(), name: f.get("name"), x: c[0], y: c[1] };
   });
   localStorage.setItem(LS_KEY, JSON.stringify(arr));
-  setStatus(`PF salvati: ${arr.length}`);
+  setStatus(`Salvati ${arr.length} PF`);
 }
-
 loadPF();
 
-/* =========================
-   7) MODALITÀ PF (click per aggiungere)
-   ========================= */
+/* =========================================
+   7) LOGICA INTERAZIONE E SELEZIONE
+   ========================================= */
 let pfMode = true;
+const selectedIds = new Set();
 const btnModePF = document.getElementById("btnModePF");
-
-function updatePFModeUI(){
-  btnModePF.textContent = `Modalità PF: ${pfMode ? "ON" : "OFF"}`;
-}
-updatePFModeUI();
 
 btnModePF.addEventListener("click", () => {
   pfMode = !pfMode;
-  updatePFModeUI();
-  setStatus(pfMode ? "Modalità PF attiva: click per inserire" : "Modalità PF disattiva");
+  btnModePF.textContent = `Modalità PF: ${pfMode ? "ON" : "OFF"}`;
+  setStatus(pfMode ? "Modalità inserimento attiva" : "Modalità selezione attiva");
 });
 
-// click mappa: se modalità PF ON -> chiedi nome e salva
 map.on("singleclick", (evt) => {
-  if(!pfMode) return;
-
-  // se clicco su un PF esistente, non crearne uno nuovo: gestiamo selezione
-  let clickedOnPF = false;
-  map.forEachFeatureAtPixel(evt.pixel, (feature, layer) => {
-    if(layer === pfLayer || layer === selectedLayer) clickedOnPF = true;
-  });
-  if(clickedOnPF) return;
-
-  const name = prompt("Nome PF (es. PF 5, PF-XYZ, come vuoi):");
-  if(!name) return;
-
-  const coord = evt.coordinate;
-  const f = new ol.Feature({
-    geometry: new ol.geom.Point(coord),
-    name: name.trim()
-  });
-  f.setId(crypto.randomUUID());
-  pfSource.addFeature(f);
-  savePF();
-});
-
-/* =========================
-   8) SELEZIONE PF (per collegarli)
-   ========================= */
-const selectedIds = new Set();
-
-function refreshSelectedLayer(){
-  selectedSource.clear();
-  for(const f of pfSource.getFeatures()){
-    if(selectedIds.has(f.getId())){
-      // duplico feature per layer evidenziazione
-      const c = f.getGeometry().getCoordinates();
-      const sf = new ol.Feature({
-        geometry: new ol.geom.Point(c),
-        name: f.get("name")
-      });
-      sf.setId(f.getId());
-      selectedSource.addFeature(sf);
-    }
-  }
-}
-
-map.on("click", (evt) => {
-  // toggle selezione se clicco su PF (anche se pfMode è ON, qui voglio selezionare)
   let found = null;
-  map.forEachFeatureAtPixel(evt.pixel, (feature, layer) => {
-    if(layer === pfLayer || layer === selectedLayer){
-      found = feature;
-      return true;
+  map.forEachFeatureAtPixel(evt.pixel, (f, l) => { 
+    if(l === pfLayer || l === selectedLayer) { found = f; return true; } 
+  });
+
+  if(found){
+    // Toggle Selezione
+    const id = found.getId();
+    if(selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);
+    refreshSelection();
+  } else if(pfMode){
+    // Inserimento nuovo PF
+    const name = prompt("Nome del Punto Fiduciale (PF):");
+    if(!name || name.trim() === "") return;
+    const f = new ol.Feature({ geometry: new ol.geom.Point(evt.coordinate), name: name.trim() });
+    f.setId(crypto.randomUUID());
+    pfSource.addFeature(f);
+    savePF();
+  }
+});
+
+function refreshSelection(){
+  selectedSource.clear();
+  pfSource.getFeatures().forEach(f => {
+    if(selectedIds.has(f.getId())) {
+      const clone = f.clone();
+      clone.setId(f.getId());
+      selectedSource.addFeature(clone);
     }
   });
-  if(!found) return;
-
-  const id = found.getId();
-  if(selectedIds.has(id)) selectedIds.delete(id);
-  else selectedIds.add(id);
-
-  refreshSelectedLayer();
-  setStatus(`PF selezionati: ${selectedIds.size}`);
-});
+  setStatus(`Selezionati: ${selectedIds.size} PF`);
+}
 
 document.getElementById("btnClearSel").addEventListener("click", () => {
   selectedIds.clear();
-  refreshSelectedLayer();
-  setStatus("Selezione PF svuotata");
+  refreshSelection();
+  setStatus("Selezione svuotata");
 });
 
-/* =========================
-   9) COLLEGA PF SELEZIONATI (temporaneo)
-   - se 2: linea
-   - se >=3: poligono chiuso (triangolo, quadrilatero, ecc.)
-   ========================= */
+/* =========================================
+   8) ELIMINA PF CON CONFERMA
+   ========================================= */
+document.getElementById("btnDeletePF").addEventListener("click", () => {
+  if(selectedIds.size === 0) {
+    alert("Seleziona prima uno o più PF sulla mappa per eliminarli.");
+    return;
+  }
+
+  const confermati = confirm(`Sei sicuro di voler eliminare i ${selectedIds.size} PF selezionati?`);
+  
+  if (confermati) {
+    pfSource.getFeatures().forEach(f => {
+      if(selectedIds.has(f.getId())) {
+        pfSource.removeFeature(f);
+      }
+    });
+    selectedIds.clear();
+    refreshSelection();
+    savePF();
+    setStatus("PF eliminati correttamente.");
+  }
+});
+
+/* =========================================
+   9) COLLEGA PF E DISEGNO LIBERO
+   ========================================= */
 document.getElementById("btnConnect").addEventListener("click", () => {
   const feats = pfSource.getFeatures().filter(f => selectedIds.has(f.getId()));
-  if(feats.length < 2){
-    alert("Seleziona almeno 2 PF.");
-    return;
-  }
-
+  if(feats.length < 2) return alert("Seleziona almeno 2 punti per collegarli.");
+  
   const coords = feats.map(f => f.getGeometry().getCoordinates());
-
-  if(feats.length === 2){
-    const line = new ol.Feature(new ol.geom.LineString(coords));
-    tempSource.addFeature(line);
-    setStatus("Linea creata (temporanea).");
-    return;
+  
+  if(feats.length === 2) {
+    tempSource.addFeature(new ol.Feature(new ol.geom.LineString(coords)));
+    setStatus("Linea creata.");
+  } else {
+    const ring = [...coords, coords[0]];
+    tempSource.addFeature(new ol.Feature(new ol.geom.Polygon([ring])));
+    setStatus("Poligono creato.");
   }
-
-  // chiudo il poligono
-  const ring = coords.slice();
-  ring.push(coords[0]);
-
-  const poly = new ol.Feature(new ol.geom.Polygon([ring]));
-  tempSource.addFeature(poly);
-  setStatus(`Poligono creato (${feats.length} vertici) (temporaneo).`);
 });
 
-/* =========================
-   10) DISEGNA POLIGONO LIBERO (temporaneo)
-   ========================= */
-let drawInteraction = null;
-
-const btnDrawPoly = document.getElementById("btnDrawPoly");
-const btnStopDraw = document.getElementById("btnStopDraw");
-
-btnDrawPoly.addEventListener("click", () => {
-  if(drawInteraction) return;
-
-  // quando disegni, per evitare caos, disattivo modalità PF
-  pfMode = false;
-  updatePFModeUI();
-
-  drawInteraction = new ol.interaction.Draw({
-    source: tempSource,
-    type: "Polygon"
-  });
-  map.addInteraction(drawInteraction);
-  btnStopDraw.disabled = false;
-  setStatus("Disegno poligono attivo: clicca più punti, doppio clic per chiudere.");
+let drawInt = null;
+document.getElementById("btnDrawPoly").addEventListener("click", () => {
+  if(drawInt) return;
+  drawInt = new ol.interaction.Draw({ source: tempSource, type: "Polygon" });
+  map.addInteraction(drawInt);
+  document.getElementById("btnStopDraw").disabled = false;
+  setStatus("Disegno attivo (doppio click per chiudere)");
 });
 
-btnStopDraw.addEventListener("click", () => {
-  if(!drawInteraction) return;
-  map.removeInteraction(drawInteraction);
-  drawInteraction = null;
-  btnStopDraw.disabled = true;
-  setStatus("Disegno poligono disattivato.");
+document.getElementById("btnStopDraw").addEventListener("click", () => {
+  if(drawInt) {
+    map.removeInteraction(drawInt);
+    drawInt = null;
+  }
+  document.getElementById("btnStopDraw").disabled = true;
+  setStatus("Disegno interrotto.");
 });
 
-/* =========================
-   11) PULISCI DISEGNI TEMPORANEI
-   ========================= */
 document.getElementById("btnClearTemp").addEventListener("click", () => {
   tempSource.clear();
   setStatus("Disegni temporanei rimossi.");
 });
 
-/* =========================
-   12) CERCA COMUNE (NOMINATIM)
-   ========================= */
-async function geocodeComune(q){
-  // query mirata all'Italia
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=it&q=${encodeURIComponent(q)}`;
-  const res = await fetch(url, { headers: { "Accept": "application/json" }});
-  if(!res.ok) throw new Error("Geocoding non disponibile");
-  const data = await res.json();
-  if(!data || !data.length) return null;
-  return { lon: parseFloat(data[0].lon), lat: parseFloat(data[0].lat), display: data[0].display_name };
-}
-
+/* =========================================
+   10) RICERCA COMUNE
+   ========================================= */
 document.getElementById("btnComune").addEventListener("click", async () => {
   const q = document.getElementById("qComune").value.trim();
   if(!q) return;
-
-  try{
-    setStatus("Ricerca comune...");
-    const r = await geocodeComune(q);
-    if(!r){
+  
+  setStatus("Ricerca in corso...");
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=it&q=${encodeURIComponent(q)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if(data.length){
+      const c = ol.proj.transform([parseFloat(data[0].lon), parseFloat(data[0].lat)], "EPSG:4326", "EPSG:25832");
+      map.getView().animate({ center: c, zoom: 17, duration: 800 });
+      setStatus(`Mappa spostata su: ${data[0].display_name}`);
+    } else {
       alert("Comune non trovato.");
-      setStatus("Comune non trovato.");
-      return;
+      setStatus("Ricerca fallita.");
     }
-    const c = ol.proj.transform([r.lon, r.lat], "EPSG:4326", "EPSG:25832");
-    map.getView().animate({ center: c, zoom: 17, duration: 600 });
-    setStatus(`Vai a: ${r.display}`);
-  }catch(e){
-    alert("Errore nella ricerca comune.");
-    setStatus("Errore nella ricerca comune.");
+  } catch(e) {
+    alert("Errore durante la ricerca.");
   }
 });
 
-/* =========================
-   13) EXPORT / IMPORT PF (per usare 2 PC)
-   ========================= */
+/* =========================================
+   11) ESPORTAZIONE / IMPORTAZIONE JSON
+   ========================================= */
 document.getElementById("btnExport").addEventListener("click", () => {
-  const raw = localStorage.getItem(LS_KEY) || "[]";
-  const blob = new Blob([raw], { type: "application/json" });
+  const data = localStorage.getItem(LS_KEY) || "[]";
+  const blob = new Blob([data], {type: "application/json"});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "pf-catasto.json";
-  document.body.appendChild(a);
+  a.download = "rilievo_pf.json";
   a.click();
-  a.remove();
-  URL.revokeObjectURL(a.href);
-  setStatus("Esportazione PF: scaricato pf-catasto.json");
 });
 
-document.getElementById("btnImport").addEventListener("click", () => {
-  document.getElementById("fileImport").click();
-});
+document.getElementById("btnImport").addEventListener("click", () => document.getElementById("fileImport").click());
 
-document.getElementById("fileImport").addEventListener("change", async (ev) => {
-  const file = ev.target.files?.[0];
+document.getElementById("fileImport").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
   if(!file) return;
-
-  try{
+  try {
     const text = await file.text();
-    const arr = JSON.parse(text);
-    if(!Array.isArray(arr)) throw new Error("Formato non valido");
-
-    // merge: aggiungo quelli nuovi evitando duplicati per id
-    const existingRaw = localStorage.getItem(LS_KEY) || "[]";
-    let existing = [];
-    try { existing = JSON.parse(existingRaw); } catch(e){ existing = []; }
-    if(!Array.isArray(existing)) existing = [];
-
-    const mapById = new Map();
-    for(const it of existing){
-      if(it?.id) mapById.set(it.id, it);
-    }
-    for(const it of arr){
-      if(it && it.id && it.name && it.x && it.y){
-        mapById.set(it.id, it);
-      }
-    }
-
-    const merged = Array.from(mapById.values());
-    localStorage.setItem(LS_KEY, JSON.stringify(merged));
+    JSON.parse(text); // Validazione veloce
+    localStorage.setItem(LS_KEY, text);
     loadPF();
-    setStatus(`Import completato. PF totali: ${pfSource.getFeatures().length}`);
-  }catch(e){
-    alert("File non valido.");
-    setStatus("Import fallito: file non valido.");
-  } finally {
-    ev.target.value = "";
+    setStatus("File importato correttamente.");
+  } catch(err) {
+    alert("Il file caricato non è un JSON valido.");
   }
+  e.target.value = "";
 });
 </script>
-
 </body>
 </html>
-
-
-
