@@ -76,7 +76,7 @@
     const wmsUrl = "https://wms.cartografia.agenziaentrate.gov.it/inspire/wms/ows01.php";
 
     const catasto = L.tileLayer.wms(wmsUrl, {
-      layers: "Mappe",          // se non va, vedi nota sotto "Se non vedi nulla"
+      layers: "Particelle",          // se non va, vedi nota sotto "Se non vedi nulla"
       format: "image/png",
       transparent: true,
       version: "1.3.0",
@@ -234,3 +234,4 @@
   </script>
 </body>
 </html>
+
