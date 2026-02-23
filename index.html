@@ -3,135 +3,421 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Catasto - Solo mappa colorata</title>
+  <title>Catasto - Gestione PF Locali</title>
 
-  <!-- NO @latest -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@7.5.2/ol.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@latest/dist/ol.css">
+  <script src="https://cdn.jsdelivr.net/npm/ol@latest/dist/ol.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/proj4@2.9.0/dist/proj4.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/ol@7.5.2/dist/ol.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/ol@7.5.2/proj/proj4.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ol@latest/proj/proj4.js"></script>
 
   <style>
-    html, body { margin:0; height:100%; }
+    html, body { margin:0; height:100%; overflow: hidden; }
     #map { width:100%; height:100%; }
+
+    /* Pannello comandi */
+    .panel {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(255,255,255,0.95);
+      padding: 12px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+      font-family: Arial, sans-serif;
+      font-size: 13px;
+      max-width: 340px;
+      z-index: 1000;
+    }
+    .row { display:flex; gap:6px; margin-bottom:6px; }
+    .row > * { flex: 1; }
+    input, button { padding: 8px; font-size: 13px; border: 1px solid #ccc; border-radius: 4px; }
+    button { cursor:pointer; background: #fdfdfd; transition: background 0.2s; }
+    button:hover { background: #f0f0f0; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    
+    .btn-danger { background: #ffeeee; border-color: #ffcccc; color: #cc0000; font-weight: bold; }
+    .btn-danger:hover { background: #ffdddd; }
+    
+    .hr { height:1px; background:#ddd; margin:8px 0; }
+    .status { margin-top:6px; font-size:12px; color:#444; font-weight: bold; min-height: 1.2em; }
+    .small { font-size:11px; opacity:0.7; margin-top: 5px; line-height: 1.3; }
+    
+    /* Coordinate in basso a destra */
+    #coords-info {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      background: rgba(255,255,255,0.85);
+      padding: 5px 10px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      pointer-events: none;
+      border: 1px solid #bbb;
+      z-index: 1000;
+      box-shadow: 0 1px 5px rgba(0,0,0,0.1);
+    }
   </style>
 </head>
 
 <body>
   <div id="map"></div>
+  <div id="coords-info">UTM32N -> X: - | Y: -</div>
+
+  <div class="panel">
+    <div class="row">
+      <input id="qComune" placeholder="Cerca comune (es. Mortara)" />
+      <button id="btnComune">Vai</button>
+    </div>
+
+    <div class="hr"></div>
+
+    <div class="row">
+      <button id="btnModePF">Modalità PF: ON</button>
+      <button id="btnClearTemp">Pulisci disegni</button>
+    </div>
+
+    <div class="row">
+      <button id="btnDrawPoly">Disegna poligono</button>
+      <button id="btnStopDraw" disabled>Stop disegno</button>
+    </div>
+
+    <div class="hr"></div>
+
+    <div class="row">
+      <button id="btnConnect">Collega selezionati</button>
+      <button id="btnClearSel">Svuota selezione</button>
+    </div>
+    <div class="row">
+      <button id="btnDeletePF" class="btn-danger">Elimina selezionati</button>
+    </div>
+
+    <div class="hr"></div>
+
+    <div class="row">
+      <button id="btnExport">Esporta PF (JSON)</button>
+      <button id="btnImport">Importa PF</button>
+    </div>
+    <input id="fileImport" type="file" accept="application/json" style="display:none" />
+
+    <div class="status" id="status"></div>
+    <div class="small">
+      I PF sono salvati automaticamente nel browser.<br>
+      Linee e poligoni sono temporanei.
+    </div>
+  </div>
 
 <script>
-/* =========================
-   CONFIG
-   ========================= */
-const WMS_URL = "https://catastovisual.princifranci.workers.dev/";
-
-/* =========================
-   PROIEZIONE EPSG:25832
-   ========================= */
+/* =========================================
+   1) CONFIGURAZIONE PROIEZIONE EPSG:25832
+   ========================================= */
 proj4.defs("EPSG:25832","+proj=utm +zone=32 +ellps=GRS80 +units=m +no_defs");
 ol.proj.proj4.register(proj4);
-
 const projection = ol.proj.get("EPSG:25832");
-const center = ol.proj.transform([9.19, 45.46], "EPSG:4326", "EPSG:25832"); // Milano
 
-/* =========================
-   WMS helper
-   ========================= */
-function makeWmsLayer(layerName){
-  return new ol.layer.Tile({
-    source: new ol.source.TileWMS({
-      url: WMS_URL,
-      params: {
-        SERVICE: "WMS",
-        VERSION: "1.3.0",
-        REQUEST: "GetMap",
-        LAYERS: layerName,
-        STYLES: "",
-        FORMAT: "image/png",
-        TRANSPARENT: true,
-        TILED: true
-      },
-      crossOrigin: "anonymous"
-    })
-  });
-}
+// Centro iniziale (Mortara)
+const center = ol.proj.transform([8.73, 45.25], "EPSG:4326", "EPSG:25832");
 
-/* =========================
-   MAP init (layer placeholder)
-   ========================= */
-const wmsLayer = makeWmsLayer("CP.CadastralParcel"); // fallback
-const map = new ol.Map({
-  target: "map",
-  layers: [wmsLayer],
-  view: new ol.View({
-    projection,
-    center,
-    zoom: 17,
-    minZoom: 10,
-    maxZoom: 22
+/* =========================================
+   2) LAYER WMS CATASTO (AGENZIA ENTRATE)
+   ========================================= */
+const wmsLayer = new ol.layer.Tile({
+  source: new ol.source.TileWMS({
+    url: "https://catastovisual.princifranci.workers.dev/",
+    params: { 
+      "SERVICE": "WMS", 
+      "VERSION": "1.3.0", 
+      "REQUEST": "GetMap", 
+      "LAYERS": "CP.CadastralParcel", 
+      "FORMAT": "image/png", 
+      "TRANSPARENT": true 
+    },
+    crossOrigin: "anonymous"
   })
 });
 
-/* =========================
-   Auto-pick "mappa colorata" da GetCapabilities
-   ========================= */
-async function fetchCapabilitiesNames(){
-  const url = `${WMS_URL}?SERVICE=WMS&REQUEST=GetCapabilities&VERSION=1.3.0`;
-  const res = await fetch(url, { headers: { "Accept": "application/xml,text/xml" }});
-  if(!res.ok) throw new Error(`GetCapabilities HTTP ${res.status}`);
-  const xmlText = await res.text();
-  const xml = new DOMParser().parseFromString(xmlText, "application/xml");
-  const names = [...xml.querySelectorAll("Layer > Name")]
-    .map(n => n.textContent?.trim())
-    .filter(Boolean);
-  return [...new Set(names)];
-}
+/* =========================================
+   3) STILI GRAFICI
+   ========================================= */
+const pfStyle = (feature) => new ol.style.Style({
+  image: new ol.style.Circle({ 
+    radius: 6, 
+    fill: new ol.style.Fill({ color: "rgba(220,0,0,0.9)" }), 
+    stroke: new ol.style.Stroke({ color: "#fff", width: 2 }) 
+  }),
+  text: new ol.style.Text({ 
+    font: "bold 12px Arial", 
+    offsetY: -15, 
+    text: feature.get("name"), 
+    fill: new ol.style.Fill({ color: "#000" }), 
+    stroke: new ol.style.Stroke({ color: "#fff", width: 3 }) 
+  })
+});
 
-function pickStyledMapLayer(names){
-  // euristica: cerco layer che suonano come "mappa/cartografia"
-  // e che NON siano solo parcel/parcelle.
-  const score = (n) => {
-    const s = n.toLowerCase();
-    let v = 0;
-    if(s.includes("map")) v += 5;
-    if(s.includes("cart")) v += 5;        // carto/cartografia
-    if(s.includes("cadastral")) v += 3;
-    if(s.includes("catast")) v += 3;
-    if(s.includes("building")) v += 2;
-    if(s.includes("road")) v += 2;
-    if(s.includes("label") || s.includes("text")) v += 1;
-    if(s.includes("parcel") || s.includes("parc")) v -= 4; // vogliamo evitare la sola parcella
-    return v;
-  };
+const selectedPFStyle = (feature) => new ol.style.Style({
+  image: new ol.style.Circle({ 
+    radius: 8, 
+    fill: new ol.style.Fill({ color: "#0078ff" }), 
+    stroke: new ol.style.Stroke({ color: "#fff", width: 2 }) 
+  }),
+  text: new ol.style.Text({ 
+    font: "bold 12px Arial", 
+    offsetY: -15, 
+    text: feature.get("name"), 
+    fill: new ol.style.Fill({ color: "#0078ff" }), 
+    stroke: new ol.style.Stroke({ color: "#fff", width: 3 }) 
+  })
+});
 
-  const ranked = names
-    .map(n => ({ n, v: score(n) }))
-    .sort((a,b) => b.v - a.v);
+/* =========================================
+   4) SORGENTI DATI E LAYER
+   ========================================= */
+const pfSource = new ol.source.Vector();
+const pfLayer = new ol.layer.Vector({ source: pfSource, style: pfStyle });
 
-  // prendo il primo “sensato”
-  const best = ranked.find(x => x.v >= 5);
-  return best?.n || null;
-}
+const selectedSource = new ol.source.Vector();
+const selectedLayer = new ol.layer.Vector({ source: selectedSource, style: selectedPFStyle });
 
-(async () => {
-  try{
-    const names = await fetchCapabilitiesNames();
-    const best = pickStyledMapLayer(names);
+const tempSource = new ol.source.Vector();
+const tempLayer = new ol.layer.Vector({ 
+  source: tempSource, 
+  style: new ol.style.Style({ 
+    stroke: new ol.style.Stroke({ color: "red", width: 2.5 }), 
+    fill: new ol.style.Fill({ color: "rgba(255,0,0,0.15)" }) 
+  }) 
+});
 
-    if(best){
-      // imposto il layer scelto
-      wmsLayer.getSource().updateParams({ LAYERS: best });
-      // utile per verificare in console
-      console.log("Layer catasto selezionato:", best);
-    } else {
-      console.warn("Nessun layer 'mappa' trovato. Resto su CP.CadastralParcel.");
-    }
-  }catch(e){
-    console.error("Impossibile leggere GetCapabilities:", e);
-    // se fallisce, resti col fallback
+/* =========================================
+   5) INIZIALIZZAZIONE MAPPA
+   ========================================= */
+const map = new ol.Map({
+  target: "map",
+  layers: [wmsLayer, tempLayer, pfLayer, selectedLayer],
+  view: new ol.View({ 
+    projection: projection, 
+    center: center, 
+    zoom: 17, 
+    minZoom: 6, 
+    maxZoom: 22 
+  })
+});
+
+const statusEl = document.getElementById("status");
+const coordsEl = document.getElementById("coords-info");
+function setStatus(msg){ statusEl.textContent = msg || ""; }
+
+// Coordinate al muovere del mouse
+map.on('pointermove', function (evt) {
+  if (evt.dragging) return;
+  const coords = evt.coordinate;
+  if (coords) {
+    coordsEl.innerHTML = `UTM32N -> X: ${coords[0].toFixed(2)} | Y: ${coords[1].toFixed(2)}`;
   }
-})();
+});
+
+/* =========================================
+   6) GESTIONE PERSISTENZA (LOCAL STORAGE)
+   ========================================= */
+const LS_KEY = "catasto_pf_v1";
+
+function loadPF(){
+  pfSource.clear();
+  selectedSource.clear();
+  const raw = localStorage.getItem(LS_KEY);
+  if(!raw) return;
+  try {
+    const arr = JSON.parse(raw);
+    arr.forEach(it => {
+      const f = new ol.Feature({ geometry: new ol.geom.Point([it.x, it.y]), name: it.name });
+      f.setId(it.id || crypto.randomUUID());
+      pfSource.addFeature(f);
+    });
+    setStatus(`PF caricati: ${arr.length}`);
+  } catch(e) { console.error("Errore caricamento", e); }
+}
+
+function savePF(){
+  const arr = pfSource.getFeatures().map(f => {
+    const c = f.getGeometry().getCoordinates();
+    return { id: f.getId(), name: f.get("name"), x: c[0], y: c[1] };
+  });
+  localStorage.setItem(LS_KEY, JSON.stringify(arr));
+  setStatus(`Salvati ${arr.length} PF`);
+}
+loadPF();
+
+/* =========================================
+   7) LOGICA INTERAZIONE E SELEZIONE
+   ========================================= */
+let pfMode = true;
+const selectedIds = new Set();
+const btnModePF = document.getElementById("btnModePF");
+
+btnModePF.addEventListener("click", () => {
+  pfMode = !pfMode;
+  btnModePF.textContent = `Modalità PF: ${pfMode ? "ON" : "OFF"}`;
+  setStatus(pfMode ? "Modalità inserimento attiva" : "Modalità selezione attiva");
+});
+
+map.on("singleclick", (evt) => {
+  let found = null;
+  map.forEachFeatureAtPixel(evt.pixel, (f, l) => { 
+    if(l === pfLayer || l === selectedLayer) { found = f; return true; } 
+  });
+
+  if(found){
+    // Toggle Selezione
+    const id = found.getId();
+    if(selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);
+    refreshSelection();
+  } else if(pfMode){
+    // Inserimento nuovo PF
+    const name = prompt("Nome del Punto Fiduciale (PF):");
+    if(!name || name.trim() === "") return;
+    const f = new ol.Feature({ geometry: new ol.geom.Point(evt.coordinate), name: name.trim() });
+    f.setId(crypto.randomUUID());
+    pfSource.addFeature(f);
+    savePF();
+  }
+});
+
+function refreshSelection(){
+  selectedSource.clear();
+  pfSource.getFeatures().forEach(f => {
+    if(selectedIds.has(f.getId())) {
+      const clone = f.clone();
+      clone.setId(f.getId());
+      selectedSource.addFeature(clone);
+    }
+  });
+  setStatus(`Selezionati: ${selectedIds.size} PF`);
+}
+
+document.getElementById("btnClearSel").addEventListener("click", () => {
+  selectedIds.clear();
+  refreshSelection();
+  setStatus("Selezione svuotata");
+});
+
+/* =========================================
+   8) ELIMINA PF CON CONFERMA
+   ========================================= */
+document.getElementById("btnDeletePF").addEventListener("click", () => {
+  if(selectedIds.size === 0) {
+    alert("Seleziona prima uno o più PF sulla mappa per eliminarli.");
+    return;
+  }
+
+  const confermati = confirm(`Sei sicuro di voler eliminare i ${selectedIds.size} PF selezionati?`);
+  
+  if (confermati) {
+    pfSource.getFeatures().forEach(f => {
+      if(selectedIds.has(f.getId())) {
+        pfSource.removeFeature(f);
+      }
+    });
+    selectedIds.clear();
+    refreshSelection();
+    savePF();
+    setStatus("PF eliminati correttamente.");
+  }
+});
+
+/* =========================================
+   9) COLLEGA PF E DISEGNO LIBERO
+   ========================================= */
+document.getElementById("btnConnect").addEventListener("click", () => {
+  const feats = pfSource.getFeatures().filter(f => selectedIds.has(f.getId()));
+  if(feats.length < 2) return alert("Seleziona almeno 2 punti per collegarli.");
+  
+  const coords = feats.map(f => f.getGeometry().getCoordinates());
+  
+  if(feats.length === 2) {
+    tempSource.addFeature(new ol.Feature(new ol.geom.LineString(coords)));
+    setStatus("Linea creata.");
+  } else {
+    const ring = [...coords, coords[0]];
+    tempSource.addFeature(new ol.Feature(new ol.geom.Polygon([ring])));
+    setStatus("Poligono creato.");
+  }
+});
+
+let drawInt = null;
+document.getElementById("btnDrawPoly").addEventListener("click", () => {
+  if(drawInt) return;
+  drawInt = new ol.interaction.Draw({ source: tempSource, type: "Polygon" });
+  map.addInteraction(drawInt);
+  document.getElementById("btnStopDraw").disabled = false;
+  setStatus("Disegno attivo (doppio click per chiudere)");
+});
+
+document.getElementById("btnStopDraw").addEventListener("click", () => {
+  if(drawInt) {
+    map.removeInteraction(drawInt);
+    drawInt = null;
+  }
+  document.getElementById("btnStopDraw").disabled = true;
+  setStatus("Disegno interrotto.");
+});
+
+document.getElementById("btnClearTemp").addEventListener("click", () => {
+  tempSource.clear();
+  setStatus("Disegni temporanei rimossi.");
+});
+
+/* =========================================
+   10) RICERCA COMUNE
+   ========================================= */
+document.getElementById("btnComune").addEventListener("click", async () => {
+  const q = document.getElementById("qComune").value.trim();
+  if(!q) return;
+  
+  setStatus("Ricerca in corso...");
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=it&q=${encodeURIComponent(q)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if(data.length){
+      const c = ol.proj.transform([parseFloat(data[0].lon), parseFloat(data[0].lat)], "EPSG:4326", "EPSG:25832");
+      map.getView().animate({ center: c, zoom: 17, duration: 800 });
+      setStatus(`Mappa spostata su: ${data[0].display_name}`);
+    } else {
+      alert("Comune non trovato.");
+      setStatus("Ricerca fallita.");
+    }
+  } catch(e) {
+    alert("Errore durante la ricerca.");
+  }
+});
+
+/* =========================================
+   11) ESPORTAZIONE / IMPORTAZIONE JSON
+   ========================================= */
+document.getElementById("btnExport").addEventListener("click", () => {
+  const data = localStorage.getItem(LS_KEY) || "[]";
+  const blob = new Blob([data], {type: "application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "rilievo_pf.json";
+  a.click();
+});
+
+document.getElementById("btnImport").addEventListener("click", () => document.getElementById("fileImport").click());
+
+document.getElementById("fileImport").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  try {
+    const text = await file.text();
+    JSON.parse(text); // Validazione veloce
+    localStorage.setItem(LS_KEY, text);
+    loadPF();
+    setStatus("File importato correttamente.");
+  } catch(err) {
+    alert("Il file caricato non è un JSON valido.");
+  }
+  e.target.value = "";
+});
 </script>
 </body>
 </html>
