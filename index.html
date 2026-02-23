@@ -5,8 +5,9 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Catasto Viewer + Punti di Riferimento</title>
 
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@latest/ol.css">
-  <script src="https://cdn.jsdelivr.net/npm/ol@latest/ol.js"></script>
+  <!-- OpenLayers (CDN corretto: /dist/) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@latest/dist/ol.css">
+  <script src="https://cdn.jsdelivr.net/npm/ol@latest/dist/ol.js"></script>
 
   <style>
     html, body { margin:0; height:100%; font-family:Arial, sans-serif; }
@@ -21,24 +22,26 @@
       border-radius:10px;
       box-shadow:0 4px 15px rgba(0,0,0,0.2);
       z-index:1000;
-      max-width:320px;
+      max-width:340px;
       font-size:13px;
     }
-
-    .panel button {
-      margin:4px 0;
-      width:100%;
-    }
+    .panel button { margin:4px 0; width:100%; }
+    .panel input[type="file"] { width:100%; margin-top:6px; }
 
     .attrib {
       position:absolute;
       bottom:5px;
       left:5px;
-      background:rgba(255,255,255,0.8);
-      padding:5px;
+      background:rgba(255,255,255,0.85);
+      padding:6px 8px;
       font-size:11px;
       border-radius:6px;
+      z-index:1000;
+      max-width:520px;
     }
+
+    .status { margin-top:8px; font-size:12px; color:#333; }
+    .small { font-size:11px; color:#555; margin-top:6px; line-height:1.3; }
   </style>
 </head>
 <body>
@@ -46,35 +49,45 @@
 <div id="map"></div>
 
 <div class="panel">
-  <b>Punti di Riferimento</b><br><br>
+  <b>Punti di riferimento</b><br><br>
 
-  <button onclick="enableDraw()">Aggiungi punto</button>
-  <button onclick="disableDraw()">Stop inserimento</button>
-  <button onclick="deleteSelected()">Cancella selezionato</button>
+  <button id="btnAdd">Aggiungi punto</button>
+  <button id="btnStop">Stop inserimento</button>
+  <button id="btnDelete">Cancella selezionato</button>
   <hr>
-  <button onclick="exportGeoJSON()">Esporta GeoJSON</button>
-  <input type="file" accept=".geojson" onchange="importGeoJSON(this.files[0])">
+  <button id="btnExport">Esporta GeoJSON</button>
+  <input id="fileImport" type="file" accept=".geojson,application/geo+json">
+
+  <div class="small">
+    Se vedi solo bianco: premi F12 → Network e controlla che le richieste a <i>ows01.php</i> vadano in 200.
+  </div>
+  <div class="status" id="status"></div>
 </div>
 
 <div class="attrib">
-  Dati cartografici: Agenzia delle Entrate – WMS Cartografia catastale (CC BY 4.0)
+  Dati cartografici: Agenzia delle Entrate – WMS Cartografia catastale (CC BY 4.0).
 </div>
 
 <script>
+  // --- CONFIG WMS ---
   const WMS_URL = "https://wms.cartografia.agenziaentrate.gov.it/inspire/wms/ows01.php";
 
+  // Prova "Mappe" oppure "Particelle" se non vedi nulla
+  const DEFAULT_LAYER = "Mappe";
+
+  // --- MAP LAYERS ---
   const wmsLayer = new ol.layer.Tile({
     source: new ol.source.TileWMS({
       url: WMS_URL,
       params: {
-        'SERVICE': 'WMS',
-        'VERSION': '1.3.0',
-        'REQUEST': 'GetMap',
-        'LAYERS': 'Mappe',
-        'FORMAT': 'image/png',
-        'TRANSPARENT': true
+        "SERVICE": "WMS",
+        "VERSION": "1.3.0",
+        "REQUEST": "GetMap",
+        "LAYERS": DEFAULT_LAYER,
+        "FORMAT": "image/png",
+        "TRANSPARENT": true
       },
-      crossOrigin: 'anonymous'
+      crossOrigin: "anonymous"
     })
   });
 
@@ -85,60 +98,48 @@
     style: new ol.style.Style({
       image: new ol.style.Circle({
         radius: 6,
-        fill: new ol.style.Fill({color: 'red'}),
-        stroke: new ol.style.Stroke({color: 'white', width: 2})
+        fill: new ol.style.Fill({ color: "red" }),
+        stroke: new ol.style.Stroke({ color: "white", width: 2 })
       })
     })
   });
 
+  // --- MAP ---
   const map = new ol.Map({
-    target: 'map',
+    target: "map",
     layers: [wmsLayer, pointsLayer],
     view: new ol.View({
-      center: ol.proj.fromLonLat([9.19, 45.46]),
+      center: ol.proj.fromLonLat([9.19, 45.46]), // Milano
       zoom: 16,
       minZoom: 6,
       maxZoom: 21
     })
   });
 
-  let draw;
-  const select = new ol.interaction.Select();
-  const modify = new ol.interaction.Modify({ source: pointsSource });
+  // --- INTERACTIONS ---
+  let drawInteraction = null;
 
-  map.addInteraction(select);
-  map.addInteraction(modify);
+  const selectInteraction = new ol.interaction.Select({ layers: [pointsLayer] });
+  const modifyInteraction = new ol.interaction.Modify({ source: pointsSource });
 
-  function enableDraw() {
-    draw = new ol.interaction.Draw({
-      source: pointsSource,
-      type: 'Point'
-    });
-    map.addInteraction(draw);
-  }
+  map.addInteraction(selectInteraction);
+  map.addInteraction(modifyInteraction);
 
-  function disableDraw() {
-    if (draw) map.removeInteraction(draw);
-  }
-
-  function deleteSelected() {
-    select.getFeatures().forEach(f => pointsSource.removeFeature(f));
-    select.getFeatures().clear();
-    saveLocal();
-  }
-
-  pointsSource.on('addfeature', saveLocal);
-  modify.on('modifyend', saveLocal);
-
+  // --- STORAGE ---
   const STORAGE_KEY = "catasto_points_v1";
+
+  function setStatus(msg) {
+    document.getElementById("status").textContent = msg || "";
+  }
 
   function saveLocal() {
     const format = new ol.format.GeoJSON();
     const geojson = format.writeFeatures(pointsSource.getFeatures(), {
       featureProjection: map.getView().getProjection(),
-      dataProjection: 'EPSG:4326'
+      dataProjection: "EPSG:4326"
     });
     localStorage.setItem(STORAGE_KEY, geojson);
+    setStatus("Salvato.");
   }
 
   function loadLocal() {
@@ -147,39 +148,86 @@
     const format = new ol.format.GeoJSON();
     const features = format.readFeatures(saved, {
       featureProjection: map.getView().getProjection(),
-      dataProjection: 'EPSG:4326'
+      dataProjection: "EPSG:4326"
     });
+    pointsSource.clear();
     pointsSource.addFeatures(features);
+    setStatus("Punti caricati da memoria locale.");
+  }
+
+  // Salva su aggiunta e su fine modifica
+  pointsSource.on("addfeature", saveLocal);
+  modifyInteraction.on("modifyend", saveLocal);
+
+  // --- ACTIONS ---
+  function enableDraw() {
+    disableDraw();
+    drawInteraction = new ol.interaction.Draw({ source: pointsSource, type: "Point" });
+    map.addInteraction(drawInteraction);
+    setStatus("Modalità inserimento: clicca sulla mappa per aggiungere punti.");
+  }
+
+  function disableDraw() {
+    if (drawInteraction) {
+      map.removeInteraction(drawInteraction);
+      drawInteraction = null;
+      setStatus("Modalità inserimento disattivata.");
+    }
+  }
+
+  function deleteSelected() {
+    const feats = selectInteraction.getFeatures();
+    feats.forEach(f => pointsSource.removeFeature(f));
+    feats.clear();
+    saveLocal();
+    setStatus("Selezionato cancellato (se presente).");
   }
 
   function exportGeoJSON() {
     const data = localStorage.getItem(STORAGE_KEY);
-    if (!data) return;
-    const blob = new Blob([data], {type: "application/geo+json"});
+    if (!data) {
+      setStatus("Nessun punto da esportare.");
+      return;
+    }
+    const blob = new Blob([data], { type: "application/geo+json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = "punti_riferimento.geojson";
+    document.body.appendChild(a);
     a.click();
+    a.remove();
     URL.revokeObjectURL(url);
+    setStatus("Esportato GeoJSON.");
   }
 
   function importGeoJSON(file) {
+    if (!file) return;
     const reader = new FileReader();
-    reader.onload = function() {
+    reader.onload = () => {
       const format = new ol.format.GeoJSON();
       const features = format.readFeatures(reader.result, {
         featureProjection: map.getView().getProjection(),
-        dataProjection: 'EPSG:4326'
+        dataProjection: "EPSG:4326"
       });
       pointsSource.clear();
       pointsSource.addFeatures(features);
       saveLocal();
+      setStatus("Import completato.");
     };
     reader.readAsText(file);
   }
 
+  // --- WIRE UI ---
+  document.getElementById("btnAdd").addEventListener("click", enableDraw);
+  document.getElementById("btnStop").addEventListener("click", disableDraw);
+  document.getElementById("btnDelete").addEventListener("click", deleteSelected);
+  document.getElementById("btnExport").addEventListener("click", exportGeoJSON);
+  document.getElementById("fileImport").addEventListener("change", (e) => importGeoJSON(e.target.files[0]));
+
+  // Init
   loadLocal();
+  setStatus("Caricato. Se la mappa catastale è vuota, prova a cambiare DEFAULT_LAYER in 'Particelle'.");
 </script>
 
 </body>
