@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Catasto - PF locali</title>
 
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@latest/dist/ol.css">
-  <script src="https://cdn.jsdelivr.net/npm/ol@latest/dist/ol.js"></script>
+  <!-- IMPORTANTISSIMO: niente @latest, pin versioni stabili -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@7.5.2/ol.css">
   <script src="https://cdn.jsdelivr.net/npm/proj4@2.9.0/dist/proj4.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/ol@latest/proj/proj4.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ol@7.5.2/dist/ol.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ol@7.5.2/proj/proj4.js"></script>
 
   <style>
     html, body { margin:0; height:100%; }
@@ -24,14 +25,11 @@
       box-shadow: 0 2px 10px rgba(0,0,0,0.15);
       font-family: Arial, sans-serif;
       font-size: 13px;
-      max-width: 360px;
+      max-width: 380px;
     }
     .row { display:flex; gap:6px; margin-bottom:6px; }
     .row > * { flex: 1; }
-    input, button {
-      padding: 6px 8px;
-      font-size: 13px;
-    }
+    input, button { padding: 6px 8px; font-size: 13px; }
     button { cursor:pointer; }
     .small { font-size:12px; opacity:0.85; }
     .hr { height:1px; background:#ddd; margin:8px 0; }
@@ -80,8 +78,8 @@
 
     <div class="status" id="status"></div>
     <div class="small">
-      PF permanenti = salvati nel browser. Disegni/linee = temporanei (spariscono al refresh).
-      <br/>Tip: doppio click su un PF per rinominarlo rapidamente.
+      PF permanenti = salvati nel browser. Disegni/linee = temporanei (spariscono al refresh).<br>
+      Tip: doppio click su un PF per rinominarlo.
     </div>
   </div>
 
@@ -92,6 +90,9 @@
 function uuid(){
   return (crypto?.randomUUID?.() ?? (Date.now() + "_" + Math.random().toString(16).slice(2)));
 }
+
+const statusEl = document.getElementById("status");
+function setStatus(msg){ statusEl.textContent = msg || ""; }
 
 /* =========================
    1) PROIEZIONE EPSG:25832
@@ -136,7 +137,6 @@ const pfStyle = new ol.style.Style({
     stroke: new ol.style.Stroke({ color: "rgba(255,255,255,0.9)", width: 3 })
   })
 });
-
 function stylePF(feature){
   const name = feature.get("name") || "";
   const s = pfStyle.clone();
@@ -170,7 +170,7 @@ const tempStyle = new ol.style.Style({
 });
 
 /* =========================
-   4) SORGENTI: PF + SELEZIONATI + TEMP
+   4) SORGENTI/LAYER
    ========================= */
 const pfSource = new ol.source.Vector();
 const pfLayer = new ol.layer.Vector({
@@ -207,11 +207,8 @@ const map = new ol.Map({
   })
 });
 
-// snap ai PF (utile per disegni)
+// snap ai PF per disegni
 map.addInteraction(new ol.interaction.Snap({ source: pfSource }));
-
-const statusEl = document.getElementById("status");
-function setStatus(msg){ statusEl.textContent = msg || ""; }
 
 /* =========================
    6) STORAGE PF (LOCALSTORAGE)
@@ -249,12 +246,12 @@ function loadPF(){
     f.setId(n.id);
     pfSource.addFeature(f);
   }
-
   setStatus(`PF salvati: ${pfSource.getFeatures().length}`);
 }
 
 function savePF(){
-  const arr = pfSource.getFeatures().map(f => {
+  const feats = pfSource.getFeatures();
+  const arr = feats.map(f => {
     const [x,y] = f.getGeometry().getCoordinates();
     return {
       id: String(f.getId() || uuid()),
@@ -286,10 +283,21 @@ btnModePF.addEventListener("click", () => {
 });
 
 /* =========================
-   8) SELEZIONE PF (ordine di selezione)
+   8) SELEZIONE PF (con ordine)
    ========================= */
 const selectedIds = new Set();
-const selectedOrder = []; // mantiene l'ordine dei click
+const selectedOrder = []; // ordine con cui selezioni (per collegamento)
+
+function pickPFAtPixel(pixel){
+  let found = null;
+  map.forEachFeatureAtPixel(pixel, (feature, layer) => {
+    if(layer === pfLayer || layer === selectedLayer){
+      found = feature;
+      return true;
+    }
+  });
+  return found;
+}
 
 function toggleSelectionById(id){
   if(selectedIds.has(id)){
@@ -318,21 +326,10 @@ function refreshSelectedLayer(){
 }
 
 /* =========================
-   9) CLICK UNIFICATO:
-   - se clic su PF: toggle selezione
-   - altrimenti, se pfMode ON: crea PF
+   9) CLICK UNIFICATO
+   - click su PF => selezione
+   - click su vuoto => crea PF (se pfMode ON)
    ========================= */
-function pickPFAtPixel(pixel){
-  let found = null;
-  map.forEachFeatureAtPixel(pixel, (feature, layer) => {
-    if(layer === pfLayer || layer === selectedLayer){
-      found = feature;
-      return true;
-    }
-  });
-  return found;
-}
-
 map.on("singleclick", (evt) => {
   const found = pickPFAtPixel(evt.pixel);
 
@@ -358,38 +355,6 @@ map.on("singleclick", (evt) => {
   savePF();
 });
 
-/* =========================
-   10) DOPPIO CLICK SU PF -> RINOMINA
-   (blocca zoom default su dblclick)
-   ========================= */
-map.getInteractions().forEach((i) => {
-  if(i instanceof ol.interaction.DoubleClickZoom) map.removeInteraction(i);
-});
-
-map.on("dblclick", (evt) => {
-  const found = pickPFAtPixel(evt.pixel);
-  if(!found) return;
-
-  const current = String(found.get("name") || "");
-  const next = prompt("Nuovo nome PF:", current);
-  if(next === null) return; // annulla
-  const nn = next.trim();
-  if(!nn) return;
-
-  // aggiorna la feature "vera" in pfSource
-  const id = found.getId();
-  const real = pfSource.getFeatures().find(f => f.getId() === id);
-  if(!real) return;
-  real.set("name", nn);
-
-  refreshSelectedLayer();
-  savePF();
-  setStatus("PF rinominato.");
-});
-
-/* =========================
-   11) BOTTONI SELEZIONE
-   ========================= */
 document.getElementById("btnClearSel").addEventListener("click", () => {
   selectedIds.clear();
   selectedOrder.length = 0;
@@ -397,6 +362,36 @@ document.getElementById("btnClearSel").addEventListener("click", () => {
   setStatus("Selezione PF svuotata");
 });
 
+/* =========================
+   10) COLLEGA PF SELEZIONATI (temporaneo)
+   - usa ordine selezione
+   ========================= */
+document.getElementById("btnConnect").addEventListener("click", () => {
+  const ids = selectedOrder.filter(id => selectedIds.has(id));
+  const feats = ids.map(id => pfSource.getFeatures().find(f => f.getId() === id)).filter(Boolean);
+
+  if(feats.length < 2){
+    alert("Seleziona almeno 2 PF.");
+    return;
+  }
+
+  const coords = feats.map(f => f.getGeometry().getCoordinates());
+
+  if(feats.length === 2){
+    tempSource.addFeature(new ol.Feature(new ol.geom.LineString(coords)));
+    setStatus("Linea creata (temporanea).");
+    return;
+  }
+
+  const ring = coords.slice();
+  ring.push(coords[0]);
+  tempSource.addFeature(new ol.Feature(new ol.geom.Polygon([ring])));
+  setStatus(`Poligono creato (${feats.length} vertici) (temporaneo).`);
+});
+
+/* =========================
+   11) RINOMINA/ELIMINA
+   ========================= */
 document.getElementById("btnRenameSel").addEventListener("click", () => {
   if(selectedIds.size !== 1){
     alert("Seleziona 1 solo PF per rinominarlo.");
@@ -436,37 +431,32 @@ document.getElementById("btnDeleteSel").addEventListener("click", () => {
   setStatus("PF eliminati.");
 });
 
-/* =========================
-   12) COLLEGA PF SELEZIONATI (temporaneo)
-   - usa l'ordine di selezione
-   - se 2: linea
-   - se >=3: poligono chiuso
-   ========================= */
-document.getElementById("btnConnect").addEventListener("click", () => {
-  const ids = selectedOrder.filter(id => selectedIds.has(id)); // coerenza
-  const feats = ids.map(id => pfSource.getFeatures().find(f => f.getId() === id)).filter(Boolean);
+// Doppio click su PF per rinominare + disattivo lo zoom di default
+map.getInteractions().forEach((i) => {
+  if(i instanceof ol.interaction.DoubleClickZoom) map.removeInteraction(i);
+});
+map.on("dblclick", (evt) => {
+  const found = pickPFAtPixel(evt.pixel);
+  if(!found) return;
 
-  if(feats.length < 2){
-    alert("Seleziona almeno 2 PF.");
-    return;
-  }
+  const id = found.getId();
+  const real = pfSource.getFeatures().find(f => f.getId() === id);
+  if(!real) return;
 
-  const coords = feats.map(f => f.getGeometry().getCoordinates());
+  const current = String(real.get("name") || "");
+  const next = prompt("Nuovo nome PF:", current);
+  if(next === null) return;
+  const nn = next.trim();
+  if(!nn) return;
 
-  if(feats.length === 2){
-    tempSource.addFeature(new ol.Feature(new ol.geom.LineString(coords)));
-    setStatus("Linea creata (temporanea).");
-    return;
-  }
-
-  const ring = coords.slice();
-  ring.push(coords[0]);
-  tempSource.addFeature(new ol.Feature(new ol.geom.Polygon([ring])));
-  setStatus(`Poligono creato (${feats.length} vertici) (temporaneo).`);
+  real.set("name", nn);
+  refreshSelectedLayer();
+  savePF();
+  setStatus("PF rinominato.");
 });
 
 /* =========================
-   13) DISEGNA POLIGONO LIBERO (temporaneo)
+   12) DISEGNA POLIGONO LIBERO (temporaneo)
    ========================= */
 let drawInteraction = null;
 const btnDrawPoly = document.getElementById("btnDrawPoly");
@@ -496,7 +486,7 @@ btnStopDraw.addEventListener("click", () => {
 });
 
 /* =========================
-   14) PULISCI DISEGNI TEMPORANEI
+   13) PULISCI DISEGNI TEMPORANEI
    ========================= */
 document.getElementById("btnClearTemp").addEventListener("click", () => {
   tempSource.clear();
@@ -504,7 +494,7 @@ document.getElementById("btnClearTemp").addEventListener("click", () => {
 });
 
 /* =========================
-   15) CERCA COMUNE (NOMINATIM)
+   14) CERCA COMUNE (NOMINATIM)
    ========================= */
 async function geocodeComune(q){
   const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=it&q=${encodeURIComponent(q)}`;
@@ -537,18 +527,20 @@ document.getElementById("btnComune").addEventListener("click", async () => {
 });
 
 /* =========================
-   16) EXPORT / IMPORT PF
-   (restano utili anche su 1 PC, come backup)
+   15) EXPORT / IMPORT PF (backup)
    - export con metadata
-   - import accetta sia array che {items:[...]}
+   - import accetta array oppure {items:[...]}
    ========================= */
 document.getElementById("btnExport").addEventListener("click", () => {
-  const rawArr = JSON.parse(localStorage.getItem(LS_KEY) || "[]");
+  let rawArr = [];
+  try { rawArr = JSON.parse(localStorage.getItem(LS_KEY) || "[]"); } catch(e){ rawArr = []; }
+  if(!Array.isArray(rawArr)) rawArr = [];
+
   const payload = {
     version: 1,
     crs: "EPSG:25832",
     createdAt: new Date().toISOString(),
-    items: Array.isArray(rawArr) ? rawArr : []
+    items: rawArr
   };
 
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -585,12 +577,13 @@ document.getElementById("fileImport").addEventListener("change", async (ev) => {
     if(!Array.isArray(existing)) existing = [];
 
     const mapById = new Map();
+
     for(const it of existing){
       const n = normalizeItem(it);
       if(n) mapById.set(n.id, n);
     }
+
     for(const it of incoming){
-      // se manca id, ne genero uno (import permissivo)
       const candidate = { ...it };
       if(!candidate.id) candidate.id = uuid();
       const n = normalizeItem(candidate);
