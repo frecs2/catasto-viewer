@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Catasto Viewer + Punti di Riferimento</title>
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@latest/ol.css">
+  <script src="https://cdn.jsdelivr.net/npm/ol@latest/ol.js"></script>
+
+  <style>
+    html, body { margin:0; height:100%; font-family:Arial, sans-serif; }
+    #map { width:100%; height:100%; }
+
+    .panel {
+      position:absolute;
+      top:10px;
+      left:10px;
+      background:white;
+      padding:12px;
+      border-radius:10px;
+      box-shadow:0 4px 15px rgba(0,0,0,0.2);
+      z-index:1000;
+      max-width:320px;
+      font-size:13px;
+    }
+
+    .panel button {
+      margin:4px 0;
+      width:100%;
+    }
+
+    .attrib {
+      position:absolute;
+      bottom:5px;
+      left:5px;
+      background:rgba(255,255,255,0.8);
+      padding:5px;
+      font-size:11px;
+      border-radius:6px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div class="panel">
+  <b>Punti di Riferimento</b><br><br>
+
+  <button onclick="enableDraw()">Aggiungi punto</button>
+  <button onclick="disableDraw()">Stop inserimento</button>
+  <button onclick="deleteSelected()">Cancella selezionato</button>
+  <hr>
+  <button onclick="exportGeoJSON()">Esporta GeoJSON</button>
+  <input type="file" accept=".geojson" onchange="importGeoJSON(this.files[0])">
+</div>
+
+<div class="attrib">
+  Dati cartografici: Agenzia delle Entrate – WMS Cartografia catastale (CC BY 4.0)
+</div>
+
+<script>
+  const WMS_URL = "https://wms.cartografia.agenziaentrate.gov.it/inspire/wms/ows01.php";
+
+  const wmsLayer = new ol.layer.Tile({
+    source: new ol.source.TileWMS({
+      url: WMS_URL,
+      params: {
+        'SERVICE': 'WMS',
+        'VERSION': '1.3.0',
+        'REQUEST': 'GetMap',
+        'LAYERS': 'Mappe',
+        'FORMAT': 'image/png',
+        'TRANSPARENT': true
+      },
+      crossOrigin: 'anonymous'
+    })
+  });
+
+  const pointsSource = new ol.source.Vector();
+
+  const pointsLayer = new ol.layer.Vector({
+    source: pointsSource,
+    style: new ol.style.Style({
+      image: new ol.style.Circle({
+        radius: 6,
+        fill: new ol.style.Fill({color: 'red'}),
+        stroke: new ol.style.Stroke({color: 'white', width: 2})
+      })
+    })
+  });
+
+  const map = new ol.Map({
+    target: 'map',
+    layers: [wmsLayer, pointsLayer],
+    view: new ol.View({
+      center: ol.proj.fromLonLat([9.19, 45.46]),
+      zoom: 16,
+      minZoom: 6,
+      maxZoom: 21
+    })
+  });
+
+  let draw;
+  const select = new ol.interaction.Select();
+  const modify = new ol.interaction.Modify({ source: pointsSource });
+
+  map.addInteraction(select);
+  map.addInteraction(modify);
+
+  function enableDraw() {
+    draw = new ol.interaction.Draw({
+      source: pointsSource,
+      type: 'Point'
+    });
+    map.addInteraction(draw);
+  }
+
+  function disableDraw() {
+    if (draw) map.removeInteraction(draw);
+  }
+
+  function deleteSelected() {
+    select.getFeatures().forEach(f => pointsSource.removeFeature(f));
+    select.getFeatures().clear();
+    saveLocal();
+  }
+
+  pointsSource.on('addfeature', saveLocal);
+  modify.on('modifyend', saveLocal);
+
+  const STORAGE_KEY = "catasto_points_v1";
+
+  function saveLocal() {
+    const format = new ol.format.GeoJSON();
+    const geojson = format.writeFeatures(pointsSource.getFeatures(), {
+      featureProjection: map.getView().getProjection(),
+      dataProjection: 'EPSG:4326'
+    });
+    localStorage.setItem(STORAGE_KEY, geojson);
+  }
+
+  function loadLocal() {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (!saved) return;
+    const format = new ol.format.GeoJSON();
+    const features = format.readFeatures(saved, {
+      featureProjection: map.getView().getProjection(),
+      dataProjection: 'EPSG:4326'
+    });
+    pointsSource.addFeatures(features);
+  }
+
+  function exportGeoJSON() {
+    const data = localStorage.getItem(STORAGE_KEY);
+    if (!data) return;
+    const blob = new Blob([data], {type: "application/geo+json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "punti_riferimento.geojson";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function importGeoJSON(file) {
+    const reader = new FileReader();
+    reader.onload = function() {
+      const format = new ol.format.GeoJSON();
+      const features = format.readFeatures(reader.result, {
+        featureProjection: map.getView().getProjection(),
+        dataProjection: 'EPSG:4326'
+      });
+      pointsSource.clear();
+      pointsSource.addFeatures(features);
+      saveLocal();
+    };
+    reader.readAsText(file);
+  }
+
+  loadLocal();
+</script>
+
+</body>
+</html>
