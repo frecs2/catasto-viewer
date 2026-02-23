@@ -97,7 +97,7 @@ const center = ol.proj.transform([9.19, 45.46], "EPSG:4326", "EPSG:25832");
    ========================= */
 const wmsLayer = new ol.layer.Tile({
   source: new ol.source.TileWMS({
-    url: "https://wms.cartografia.agenziaentrate.gov.it/inspire/wms/ows01.php",
+    url: "https://small-tree-0617.princifranci.workers.dev/",
     params: {
       "SERVICE": "WMS",
       "VERSION": "1.3.0",
@@ -498,3 +498,4 @@ document.getElementById("fileImport").addEventListener("change", async (ev) => {
 
 </body>
 </html>
+
