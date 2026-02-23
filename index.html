@@ -130,7 +130,7 @@ const wmsLayer = new ol.layer.Tile({
       SERVICE: "WMS",
       VERSION: "1.3.0",
       REQUEST: "GetMap",
-      LAYERS: "CP.CadastralZoning,acque,strade,CP.CadastralParcel,fabbricati,codice_plla,simbolo_graffa",
+      LAYERS: "CP.CadastralParcel,acque,strade,CP.CadastralZoning,fabbricati,codice_plla,simbolo_graffa",
       STYLES: "",
       FORMAT: "image/png",
       TRANSPARENT: true,
@@ -425,6 +425,7 @@ document.getElementById("fileImport").addEventListener("change", async (e) => {
 </script>
 </body>
 </html>
+
 
 
 
