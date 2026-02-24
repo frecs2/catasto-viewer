@@ -297,8 +297,8 @@
     // Milano
     const center = ol.proj.transform([9.1900, 45.4642], "EPSG:4326", "EPSG:25832");
 
-    // 1. Layer di base (Sfondo: Province e Comuni)
-const baseCartografia = new ol.layer.Tile({
+    // Layer di Sfondo (Province, Comuni, Fogli) - Visibile a zoom bassi/medi
+const baseWmsLayer = new ol.layer.Tile({
   source: new ol.source.TileWMS({
     url: "https://catastovisual.princifranci.workers.dev/",
     params: {
@@ -308,12 +308,14 @@ const baseCartografia = new ol.layer.Tile({
       LAYERS: "province,comuni,fogli",
       FORMAT: "image/png",
       TRANSPARENT: true,
-    }
+      TILED: true
+    },
+    crossOrigin: "anonymous"
   })
 });
 
-// 2. Layer di dettaglio (Particelle e Fabbricati)
-const detailCartografia = new ol.layer.Tile({
+// Layer di Dettaglio (Particelle, Fabbricati, Testi) - Visibile a zoom alti
+const detailWmsLayer = new ol.layer.Tile({
   source: new ol.source.TileWMS({
     url: "https://catastovisual.princifranci.workers.dev/",
     params: {
@@ -323,15 +325,10 @@ const detailCartografia = new ol.layer.Tile({
       LAYERS: "acque,strade,CP.CadastralParcel,fabbricati,codice_plla,simbolo_graffa",
       FORMAT: "image/png",
       TRANSPARENT: true,
-    }
+      TILED: true
+    },
+    crossOrigin: "anonymous"
   })
-});
-
-// Nella mappa, inseriscili in questo ordine:
-const map = new ol.Map({
-  target: "map",
-  layers: [baseCartografia, detailCartografia, tempLayer, pfLayer, selectedLayer], // baseCartografia è il primo, quindi sta sotto
-  // ... resto del codice
 });
 
     function buildPFLabel(feature){
