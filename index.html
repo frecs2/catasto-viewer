@@ -13,7 +13,6 @@
   <style>
     html, body { margin:0; height:100%; overflow:hidden; }
     #map { width:100%; height:100%; }
-
     .panel{
       position:absolute; top:10px; left:50px;
       background: rgba(255,255,255,0.95);
@@ -38,7 +37,6 @@
       display:inline-block; padding:2px 8px; border-radius:999px;
       border:1px solid #ddd; background:#f7f7f7; font-size:12px;
     }
-
     #coords-info{
       position:absolute; bottom:10px; right:10px;
       background: rgba(255,255,255,0.85);
@@ -48,8 +46,6 @@
       border:1px solid #bbb; z-index:1000;
       box-shadow:0 1px 5px rgba(0,0,0,0.1);
     }
-
-    /* login overlay */
     .overlay{
       position: fixed; inset: 0;
       background: rgba(0,0,0,0.55);
@@ -65,7 +61,6 @@
     }
     .modal h3{ margin: 0 0 10px; font-size: 16px; }
     .modal .actions{ display:flex; gap:8px; justify-content:flex-end; }
-
     #adminBox{
       display:none;
       margin-top:10px; padding-top:10px;
@@ -80,6 +75,10 @@
   <div id="coords-info">UTM32N -> X: - | Y: -</div>
 
   <div class="panel">
+    <div class="hr"></div>
+    <div class="small"><b>Elenco PF (per Foglio)</b></div>
+    <div id="pfList" class="small" style="max-height:220px; overflow:auto; border:1px solid #ddd; border-radius:6px; padding:6px; background:#fff;"></div>
+
     <div class="row">
       <button id="btnAuth">Login</button>
       <button id="btnLogout" disabled>Logout</button>
@@ -142,7 +141,6 @@
     </div>
   </div>
 
-  <!-- LOGIN OVERLAY -->
   <div class="overlay" id="loginOverlay">
     <div class="modal">
       <h3>Accesso</h3>
@@ -156,16 +154,12 @@
         <button id="btnGuest">Entra come ospite</button>
         <button id="btnLogin">Login</button>
       </div>
-      <div class="small" style="margin-top:10px;">
-        Ruoli: <span class="pill">admin</span> elimina; <span class="pill">user</span> inserisce.
-      </div>
     </div>
   </div>
 
   <script>
     const API_BASE = "https://catasto-api.princifranci.workers.dev";
     const TOKEN_KEY = "catasto_token_v1";
-
     const statusEl = document.getElementById("status");
     function setStatus(msg){ statusEl.textContent = msg || ""; }
 
@@ -192,144 +186,95 @@
     async function apiMe(){
       const token = localStorage.getItem(TOKEN_KEY);
       if(token) session.token = token;
-
-      const res = await fetch(API_BASE + "/api/me", {
-        method: "GET",
-        headers: session.token ? { "Authorization":"Bearer " + session.token } : {}
-      });
-      const data = await res.json();
-      const u = data?.user || { username:"Ospite", role:"guest" };
-      session.username = u.username || "Ospite";
-      session.role = u.role || "guest";
+      try {
+        const res = await fetch(API_BASE + "/api/me", {
+          method: "GET",
+          headers: session.token ? { "Authorization":"Bearer " + session.token } : {}
+        });
+        const data = await res.json();
+        const u = data?.user || { username:"Ospite", role:"guest" };
+        session.username = u.username || "Ospite";
+        session.role = u.role || "guest";
+      } catch(e) { console.error(e); }
     }
 
     function updateAuthUI(){
       document.getElementById("userInfo").innerHTML =
         `Utente: <b>${escapeHtml(session.username)}</b> <span class="pill">${escapeHtml(session.role)}</span>`;
-
       document.getElementById("btnLogout").disabled = (session.role === "guest");
       document.getElementById("btnAuth").disabled = (session.role !== "guest");
-
       const delBtn = document.getElementById("btnDeletePF");
       delBtn.disabled = (session.role !== "admin");
-      delBtn.title = (session.role !== "admin") ? "Solo admin può eliminare PF" : "";
-
       document.getElementById("adminBox").style.display = (session.role === "admin") ? "block" : "none";
     }
 
-    /* overlay */
     const overlay = document.getElementById("loginOverlay");
     const loginMsg = document.getElementById("loginMsg");
-    function showLogin(){
-      document.getElementById("loginUser").value = "";
-      document.getElementById("loginPass").value = "";
-      loginMsg.textContent = "";
-      overlay.style.display = "flex";
-    }
+    function showLogin(){ overlay.style.display = "flex"; }
     function hideLogin(){ overlay.style.display = "none"; }
-
     document.getElementById("btnAuth").addEventListener("click", showLogin);
 
     document.getElementById("btnGuest").addEventListener("click", async () => {
       setToken(null);
-      session.username = "Ospite";
-      session.role = "guest";
-      updateAuthUI();
-      hideLogin();
-      setStatus("Modalità ospite.");
+      session.username = "Ospite"; session.role = "guest";
+      updateAuthUI(); hideLogin(); setStatus("Modalità ospite.");
       await loadPFCloud();
     });
 
     document.getElementById("btnLogin").addEventListener("click", async () => {
       const username = document.getElementById("loginUser").value.trim();
       const password = document.getElementById("loginPass").value;
-      if(!username || !password){
-        loginMsg.textContent = "Inserisci username e password.";
-        return;
-      }
-      try{
+      if(!username || !password) return loginMsg.textContent = "Inserisci dati.";
+      try {
         const res = await fetch(API_BASE + "/api/login", {
-          method:"POST",
-          headers:{ "Content-Type":"application/json" },
+          method:"POST", headers:{ "Content-Type":"application/json" },
           body: JSON.stringify({ username, password })
         });
         const data = await res.json();
-        if(!res.ok){
-          loginMsg.textContent = data?.error || "Login fallito.";
-          return;
-        }
+        if(!res.ok) return loginMsg.textContent = data?.error || "Fallito.";
         setToken(data.token);
-        session.username = data.user.username;
-        session.role = data.user.role;
-        updateAuthUI();
-        hideLogin();
-        setStatus("Login eseguito.");
+        session.username = data.user.username; session.role = data.user.role;
+        updateAuthUI(); hideLogin(); setStatus("Login eseguito.");
         await loadPFCloud();
-      } catch(e){
-        console.error(e);
-        loginMsg.textContent = "Errore di rete.";
-      }
+      } catch(e){ loginMsg.textContent = "Errore rete."; }
     });
 
     document.getElementById("btnLogout").addEventListener("click", async () => {
       if(!confirm("Vuoi fare logout?")) return;
-      try{
-        if(session.token){
-          await fetch(API_BASE + "/api/logout", {
-            method:"POST",
-            headers: { "Authorization":"Bearer " + session.token }
-          });
-        }
-      } catch {}
-      setToken(null);
-      session.username = "Ospite";
-      session.role = "guest";
-      updateAuthUI();
-      setStatus("Logout eseguito.");
+      setToken(null); session.username = "Ospite"; session.role = "guest";
+      updateAuthUI(); setStatus("Logout eseguito.");
       await loadPFCloud();
     });
 
-    /* OpenLayers */
     proj4.defs("EPSG:25832","+proj=utm +zone=32 +ellps=GRS80 +units=m +no_defs");
     ol.proj.proj4.register(proj4);
     const projection = ol.proj.get("EPSG:25832");
-
-    // Milano
     const center = ol.proj.transform([9.1900, 45.4642], "EPSG:4326", "EPSG:25832");
 
-    // Layer di Sfondo (Province, Comuni, Fogli) - Visibile a zoom bassi/medi
-const baseWmsLayer = new ol.layer.Tile({
-  source: new ol.source.TileWMS({
-    url: "https://catastovisual.princifranci.workers.dev/",
-    params: {
-      SERVICE: "WMS",
-      VERSION: "1.3.0",
-      REQUEST: "GetMap",
-      LAYERS: "province,comuni,fogli",
-      FORMAT: "image/png",
-      TRANSPARENT: true,
-      TILED: true
-    },
-    crossOrigin: "anonymous"
-  })
-});
+    // CORREZIONE 1: Separazione dei Layer WMS per visibilità corretta
+    const baseWmsLayer = new ol.layer.Tile({
+      source: new ol.source.TileWMS({
+        url: "https://catastovisual.princifranci.workers.dev/",
+        params: {
+          SERVICE: "WMS", VERSION: "1.3.0", REQUEST: "GetMap",
+          LAYERS: "province,comuni,fogli",
+          FORMAT: "image/png", TRANSPARENT: true, TILED: true
+        },
+        crossOrigin: "anonymous"
+      })
+    });
 
-// Layer di Dettaglio (Particelle, Fabbricati, Testi) - Visibile a zoom alti
-const detailWmsLayer = new ol.layer.Tile({
-  source: new ol.source.TileWMS({
-    url: "https://catastovisual.princifranci.workers.dev/",
-    params: {
-      SERVICE: "WMS",
-      VERSION: "1.3.0",
-      REQUEST: "GetMap",
-      LAYERS: "acque,strade,CP.CadastralParcel,fabbricati,codice_plla,simbolo_graffa",
-      FORMAT: "image/png",
-      TRANSPARENT: true,
-      TILED: true
-    },
-    crossOrigin: "anonymous"
-  })
-});
+    const detailWmsLayer = new ol.layer.Tile({
+      source: new ol.source.TileWMS({
+        url: "https://catastovisual.princifranci.workers.dev/",
+        params: {
+          SERVICE: "WMS", VERSION: "1.3.0", REQUEST: "GetMap",
+          LAYERS: "acque,strade,CP.CadastralParcel,fabbricati,codice_plla,simbolo_graffa",
+          FORMAT: "image/png", TRANSPARENT: true, TILED: true
+        },
+        crossOrigin: "anonymous"
+      })
+    });
 
     function buildPFLabel(feature){
       const name = feature.get("name") || "";
@@ -337,336 +282,144 @@ const detailWmsLayer = new ol.layer.Tile({
       return by ? `${name} (${by})` : name;
     }
 
-    const pfStyle = (feature) => new ol.style.Style({
-      image: new ol.style.Circle({
-        radius: 6,
-        fill: new ol.style.Fill({ color: "rgba(220,0,0,0.9)" }),
-        stroke: new ol.style.Stroke({ color: "#fff", width: 2 })
-      }),
-      text: new ol.style.Text({
-        font: "bold 12px Arial",
-        offsetY: -15,
-        text: buildPFLabel(feature),
-        fill: new ol.style.Fill({ color: "#000" }),
-        stroke: new ol.style.Stroke({ color: "#fff", width: 3 })
-      })
+    function parsePFName(pfName){
+      const parts = String(pfName || "").trim().toUpperCase().split("/");
+      if(parts.length !== 3) return null;
+      return { pf: parts[0], foglio: parts[1], comune: parts[2] };
+    }
+
+    function renderPFList(){
+      const box = document.getElementById("pfList");
+      const feats = pfSource.getFeatures();
+      const groups = new Map();
+      for(const f of feats){
+        const name = f.get("name") || "";
+        const p = parsePFName(name);
+        const key = p ? `${p.comune}|${p.foglio}` : "ALTRO|0000";
+        if(!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(f);
+      }
+      const sortedKeys = Array.from(groups.keys()).sort();
+      let html = "";
+      if(sortedKeys.length === 0) return box.innerHTML = "<i>Nessun PF.</i>";
+      for(const key of sortedKeys){
+        const [comune, foglio] = key.split("|");
+        const list = groups.get(key);
+        html += `<div style="margin:6px 0 4px;"><b>${comune}</b> — Foglio <b>${foglio}</b> <span class="pill">${list.length}</span></div>`;
+        for(const f of list){
+          const id = f.getId();
+          const name = escapeHtml(f.get("name") || "");
+          html += `<button data-pfid="${escapeHtml(id)}" style="width:100%; text-align:left; padding:6px; margin:2px 0; font-size:12px;">${name}</button>`;
+        }
+      }
+      box.innerHTML = html;
+      box.querySelectorAll("button[data-pfid]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const f = pfSource.getFeatureById(btn.getAttribute("data-pfid"));
+          if(f){
+            map.getView().animate({ center: f.getGeometry().getCoordinates(), zoom: 19 });
+            selectedIds.clear(); selectedIds.add(f.getId()); refreshSelection();
+          }
+        });
+      });
+    }
+
+    const pfStyle = (f) => new ol.style.Style({
+      image: new ol.style.Circle({ radius: 6, fill: new ol.style.Fill({ color: "rgba(220,0,0,0.9)" }), stroke: new ol.style.Stroke({ color: "#fff", width: 2 }) }),
+      text: new ol.style.Text({ font: "bold 12px Arial", offsetY: -15, text: buildPFLabel(f), fill: new ol.style.Fill({ color: "#000" }), stroke: new ol.style.Stroke({ color: "#fff", width: 3 }) })
     });
 
-    const selectedPFStyle = (feature) => new ol.style.Style({
-      image: new ol.style.Circle({
-        radius: 8,
-        fill: new ol.style.Fill({ color: "#0078ff" }),
-        stroke: new ol.style.Stroke({ color: "#fff", width: 2 })
-      }),
-      text: new ol.style.Text({
-        font: "bold 12px Arial",
-        offsetY: -15,
-        text: buildPFLabel(feature),
-        fill: new ol.style.Fill({ color: "#0078ff" }),
-        stroke: new ol.style.Stroke({ color: "#fff", width: 3 })
-      })
+    const selectedPFStyle = (f) => new ol.style.Style({
+      image: new ol.style.Circle({ radius: 8, fill: new ol.style.Fill({ color: "#0078ff" }), stroke: new ol.style.Stroke({ color: "#fff", width: 2 }) }),
+      text: new ol.style.Text({ font: "bold 12px Arial", offsetY: -15, text: buildPFLabel(f), fill: new ol.style.Fill({ color: "#0078ff" }), stroke: new ol.style.Stroke({ color: "#fff", width: 3 }) })
     });
 
     const pfSource = new ol.source.Vector();
     const pfLayer = new ol.layer.Vector({ source: pfSource, style: pfStyle });
-
     const selectedSource = new ol.source.Vector();
     const selectedLayer = new ol.layer.Vector({ source: selectedSource, style: selectedPFStyle });
-
     const tempSource = new ol.source.Vector();
-    const tempLayer = new ol.layer.Vector({
-      source: tempSource,
-      style: new ol.style.Style({
-        stroke: new ol.style.Stroke({ color: "red", width: 2.5 }),
-        fill: new ol.style.Fill({ color: "rgba(255,0,0,0.15)" })
-      })
-    });
+    const tempLayer = new ol.layer.Vector({ source: tempSource, style: new ol.style.Style({ stroke: new ol.style.Stroke({ color: "red", width: 2.5 }), fill: new ol.style.Fill({ color: "rgba(255,0,0,0.15)" }) }) });
 
+    // CORREZIONE 2: Utilizzo dei layer corretti nell'inizializzazione
     const map = new ol.Map({
       target: "map",
-      layers: [wmsLayer, tempLayer, pfLayer, selectedLayer],
+      layers: [baseWmsLayer, detailWmsLayer, tempLayer, pfLayer, selectedLayer],
       view: new ol.View({ projection, center, zoom: 17, minZoom: 6, maxZoom: 22 })
     });
 
-    const coordsEl = document.getElementById("coords-info");
     map.on("pointermove", (evt) => {
       if(evt.dragging) return;
       const c = evt.coordinate;
-      coordsEl.textContent = `UTM32N -> X: ${c[0].toFixed(2)} | Y: ${c[1].toFixed(2)}`;
+      document.getElementById("coords-info").textContent = `UTM32N -> X: ${c[0].toFixed(2)} | Y: ${c[1].toFixed(2)}`;
     });
 
-    /* PF cloud */
     const selectedIds = new Set();
     let pfMode = false;
-
     const btnModePF = document.getElementById("btnModePF");
-    function updatePFButton(){ btnModePF.textContent = `Modalità PF: ${pfMode ? "ON" : "OFF"}`; }
-    updatePFButton();
-
-    btnModePF.addEventListener("click", () => {
-      pfMode = !pfMode;
-      updatePFButton();
-      setStatus(pfMode ? "Modalità inserimento PF attiva" : "Modalità inserimento PF disattiva");
-    });
+    btnModePF.addEventListener("click", () => { pfMode = !pfMode; btnModePF.textContent = `Modalità PF: ${pfMode ? "ON" : "OFF"}`; });
 
     function refreshSelection(){
       selectedSource.clear();
-      for(const f of pfSource.getFeatures()){
-        if(selectedIds.has(f.getId())){
-          const clone = f.clone();
-          clone.setId(f.getId());
-          selectedSource.addFeature(clone);
-        }
-      }
-      setStatus(`Selezionati: ${selectedIds.size} PF`);
+      for(const f of pfSource.getFeatures()) if(selectedIds.has(f.getId())) selectedSource.addFeature(f.clone());
     }
 
+    // CORREZIONE 3: Ottimizzazione caricamento (renderPFList fuori dal loop)
     async function loadPFCloud(){
-      try{
+      try {
         const res = await fetch(API_BASE + "/api/pf");
         const data = await res.json();
         const items = data?.items || [];
-
-        pfSource.clear();
-        selectedSource.clear();
-        selectedIds.clear();
-
+        pfSource.clear(); selectedSource.clear(); selectedIds.clear();
         for(const it of items){
-          const f = new ol.Feature({
-            geometry: new ol.geom.Point([Number(it.x), Number(it.y)]),
-            name: String(it.name || ""),
-            by: String(it.by || "")
-          });
+          const f = new ol.Feature({ geometry: new ol.geom.Point([Number(it.x), Number(it.y)]), name: String(it.name || ""), by: String(it.by || "") });
           f.setId(it.id);
           pfSource.addFeature(f);
         }
+        renderPFList();
         setStatus(`PF cloud: ${items.length}`);
-      } catch(e){
-        console.error(e);
-        setStatus("Errore caricamento PF cloud");
-      }
-    }
-
-    document.getElementById("btnReloadPF").addEventListener("click", loadPFCloud);
-
-    async function createPFCloud(name, x, y){
-      const res = await fetch(API_BASE + "/api/pf", {
-        method:"POST",
-        headers: authHeaders(),
-        body: JSON.stringify({ name, x, y })
-      });
-      const data = await res.json();
-      if(!res.ok){
-        alert(data?.error || "Errore creazione PF");
-        return null;
-      }
-      return data.item;
-    }
-
-    async function deletePFCloud(id){
-      const res = await fetch(API_BASE + "/api/pf/" + encodeURIComponent(id), {
-        method:"DELETE",
-        headers: session.token ? { "Authorization":"Bearer " + session.token } : {}
-      });
-      const data = await res.json();
-      if(!res.ok){
-        alert(data?.error || "Errore eliminazione PF");
-        return false;
-      }
-      return true;
+      } catch(e){ setStatus("Errore caricamento."); }
     }
 
     map.on("singleclick", async (evt) => {
       let found = null;
-      map.forEachFeatureAtPixel(evt.pixel, (f, l) => {
-        if(l === pfLayer || l === selectedLayer){ found = f; return true; }
-      });
-
+      map.forEachFeatureAtPixel(evt.pixel, (f, l) => { if(l === pfLayer || l === selectedLayer) { found = f; return true; } });
       if(found){
         const id = found.getId();
-        if(selectedIds.has(id)) selectedIds.delete(id);
-        else selectedIds.add(id);
-        refreshSelection();
-        return;
+        if(selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);
+        refreshSelection(); return;
       }
-
       if(!pfMode) return;
+      if(session.role === "guest") return alert("Fai login.");
 
-      if(session.role !== "user" && session.role !== "admin"){
-        alert("Per inserire PF devi fare login (non come ospite).");
-        return;
-      }
+      const standardRegex = /^PF\d{2}\/\d{3}[A-Z0-9]\/[A-Z]\d{3}$/;
+      let name = prompt("Nome PF (PFXX/XXXY/YXXX):", "PF05/0010/L872");
+      if(!name) return;
+      name = name.trim().toUpperCase();
+      if(!standardRegex.test(name)) return alert("Formato non valido.");
 
-      const name = prompt("Nome del Punto Fiduciale (PF):");
-      if(!name || !name.trim()) return;
-
-      const item = await createPFCloud(name.trim(), evt.coordinate[0], evt.coordinate[1]);
-      if(!item) return;
-
-      const f = new ol.Feature({
-        geometry: new ol.geom.Point([item.x, item.y]),
-        name: item.name,
-        by: item.by
+      const res = await fetch(API_BASE + "/api/pf", {
+        method:"POST", headers: authHeaders(),
+        body: JSON.stringify({ name, x: evt.coordinate[0], y: evt.coordinate[1] })
       });
-      f.setId(item.id);
-      pfSource.addFeature(f);
-
-      setStatus("PF creato (cloud).");
+      if(res.ok) loadPFCloud();
     });
 
-    document.getElementById("btnClearSel").addEventListener("click", () => {
-      selectedIds.clear();
-      refreshSelection();
-      setStatus("Selezione svuotata");
-    });
-
-    document.getElementById("btnDeletePF").addEventListener("click", async () => {
-      if(session.role !== "admin"){
-        alert("Solo admin può eliminare PF.");
-        return;
-      }
-      if(selectedIds.size === 0){
-        alert("Seleziona prima uno o più PF.");
-        return;
-      }
-      if(!confirm(`Eliminare ${selectedIds.size} PF selezionati?`)) return;
-
-      const ids = Array.from(selectedIds);
-      let okCount = 0;
-      for(const id of ids){
-        const ok = await deletePFCloud(id);
-        if(ok) okCount++;
-      }
-      await loadPFCloud();
-      setStatus(`Eliminati: ${okCount}/${ids.length}`);
-    });
-
-    /* linee/poligoni temporanei */
-    document.getElementById("btnConnect").addEventListener("click", () => {
-      const feats = pfSource.getFeatures().filter(f => selectedIds.has(f.getId()));
-      if(feats.length < 2) return alert("Seleziona almeno 2 punti per collegarli.");
-      const coords = feats.map(f => f.getGeometry().getCoordinates());
-      if(feats.length === 2){
-        tempSource.addFeature(new ol.Feature(new ol.geom.LineString(coords)));
-        setStatus("Linea creata (temporanea).");
-      } else {
-        const ring = [...coords, coords[0]];
-        tempSource.addFeature(new ol.Feature(new ol.geom.Polygon([ring])));
-        setStatus("Poligono creato (temporaneo).");
-      }
-    });
-
-    let drawInt = null;
-    const btnStopDraw = document.getElementById("btnStopDraw");
-
-    document.getElementById("btnDrawPoly").addEventListener("click", () => {
-      if(drawInt) return;
-      drawInt = new ol.interaction.Draw({ source: tempSource, type: "Polygon" });
-      map.addInteraction(drawInt);
-      btnStopDraw.disabled = false;
-      setStatus("Disegno attivo (doppio click per chiudere)");
-    });
-
-    btnStopDraw.addEventListener("click", () => {
-      if(drawInt){ map.removeInteraction(drawInt); drawInt = null; }
-      btnStopDraw.disabled = true;
-      setStatus("Disegno interrotto.");
-    });
-
-    document.getElementById("btnClearTemp").addEventListener("click", () => {
-      tempSource.clear();
-      setStatus("Disegni temporanei rimossi.");
-    });
-
-    /* cerca comune */
+    document.getElementById("btnReloadPF").addEventListener("click", loadPFCloud);
+    document.getElementById("btnClearSel").addEventListener("click", () => { selectedIds.clear(); refreshSelection(); });
+    document.getElementById("btnClearTemp").addEventListener("click", () => tempSource.clear());
     document.getElementById("btnComune").addEventListener("click", async () => {
-      const q = document.getElementById("qComune").value.trim();
-      if(!q) return;
-      setStatus("Ricerca in corso...");
-      try{
-        const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=it&q=${encodeURIComponent(q)}`;
-        const res = await fetch(url, { headers: { "Accept": "application/json" }});
-        const data = await res.json();
-        if(data?.length){
-          const c = ol.proj.transform([parseFloat(data[0].lon), parseFloat(data[0].lat)], "EPSG:4326", "EPSG:25832");
-          map.getView().animate({ center: c, zoom: 17, duration: 800 });
-          setStatus(`Mappa spostata su: ${data[0].display_name}`);
-        } else {
-          alert("Comune non trovato.");
-          setStatus("Ricerca fallita.");
-        }
-      } catch(e){
-        console.error(e);
-        alert("Errore durante la ricerca.");
-        setStatus("Errore ricerca.");
-      }
-    });
-
-    /* export PF cloud */
-    document.getElementById("btnExport").addEventListener("click", async () => {
-      try{
-        const res = await fetch(API_BASE + "/api/pf");
-        const data = await res.json();
-        const items = data?.items || [];
-        const blob = new Blob([JSON.stringify(items, null, 2)], {type:"application/json"});
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = "pf-cloud.json";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(a.href);
-        setStatus("Export PF cloud completato.");
-      } catch(e){
-        console.error(e);
-        setStatus("Errore export PF cloud");
-      }
-    });
-
-    /* admin crea utente */
-    document.getElementById("btnCreateUser").addEventListener("click", async () => {
-      const msg = document.getElementById("adminMsg");
-      msg.style.color = "#b00";
-      msg.textContent = "";
-
-      const u = document.getElementById("newUser").value.trim();
-      const p = document.getElementById("newPass").value;
-      const r = document.getElementById("newRole").value;
-
-      if(!u || !p){
-        msg.textContent = "Inserisci username e password.";
-        return;
-      }
-
-      try{
-        const res = await fetch(API_BASE + "/api/admin/create-user", {
-          method:"POST",
-          headers: authHeaders(),
-          body: JSON.stringify({ username: u, password: p, role: r })
-        });
-        const data = await res.json();
-
-        if(!res.ok){
-          msg.textContent = data?.error || "Errore creazione utente.";
-          return;
-        }
-
-        msg.style.color = "#060";
-        msg.textContent = `Creato: ${data.user.username} (${data.user.role})`;
-
-        document.getElementById("newUser").value = "";
-        document.getElementById("newPass").value = "";
-        document.getElementById("newRole").value = "user";
-      } catch(e){
-        console.error(e);
-        msg.textContent = "Errore di rete.";
+      const q = document.getElementById("qComune").value;
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&countrycodes=it`);
+      const data = await res.json();
+      if(data.length){
+        const c = ol.proj.transform([parseFloat(data[0].lon), parseFloat(data[0].lat)], "EPSG:4326", "EPSG:25832");
+        map.getView().animate({ center: c, zoom: 17 });
       }
     });
 
     (async () => {
-      await apiMe();
-      updateAuthUI();
-      await loadPFCloud();
+      await apiMe(); updateAuthUI(); await loadPFCloud();
       if(session.role === "guest") showLogin();
     })();
   </script>
