@@ -297,22 +297,42 @@
     // Milano
     const center = ol.proj.transform([9.1900, 45.4642], "EPSG:4326", "EPSG:25832");
 
-    const wmsLayer = new ol.layer.Tile({
-      source: new ol.source.TileWMS({
-        url: "https://catastovisual.princifranci.workers.dev/",
-        params: {
-          SERVICE: "WMS",
-          VERSION: "1.3.0",
-          REQUEST: "GetMap",
-          LAYERS: "province,comuni,fogli,CP.CadastralZoning,acque,strade,CP.CadastralParcel,fabbricati,codice_plla,simbolo_graffa",
-          STYLES: "",
-          FORMAT: "image/png",
-          TRANSPARENT: true,
-          TILED: true
-        },
-        crossOrigin: "anonymous"
-      })
-    });
+    // 1. Layer di base (Sfondo: Province e Comuni)
+const baseCartografia = new ol.layer.Tile({
+  source: new ol.source.TileWMS({
+    url: "https://catastovisual.princifranci.workers.dev/",
+    params: {
+      SERVICE: "WMS",
+      VERSION: "1.3.0",
+      REQUEST: "GetMap",
+      LAYERS: "province,comuni,fogli",
+      FORMAT: "image/png",
+      TRANSPARENT: true,
+    }
+  })
+});
+
+// 2. Layer di dettaglio (Particelle e Fabbricati)
+const detailCartografia = new ol.layer.Tile({
+  source: new ol.source.TileWMS({
+    url: "https://catastovisual.princifranci.workers.dev/",
+    params: {
+      SERVICE: "WMS",
+      VERSION: "1.3.0",
+      REQUEST: "GetMap",
+      LAYERS: "acque,strade,CP.CadastralParcel,fabbricati,codice_plla,simbolo_graffa",
+      FORMAT: "image/png",
+      TRANSPARENT: true,
+    }
+  })
+});
+
+// Nella mappa, inseriscili in questo ordine:
+const map = new ol.Map({
+  target: "map",
+  layers: [baseCartografia, detailCartografia, tempLayer, pfLayer, selectedLayer], // baseCartografia è il primo, quindi sta sotto
+  // ... resto del codice
+});
 
     function buildPFLabel(feature){
       const name = feature.get("name") || "";
