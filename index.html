@@ -14,84 +14,64 @@
     html, body { margin:0; height:100%; overflow:hidden; }
     #map { width:100%; height:100%; }
 
-    .panel {
-      position:absolute;
-      top:10px; left:50px;
+    .panel{
+      position:absolute; top:10px; left:50px;
       background: rgba(255,255,255,0.95);
-      padding:12px;
-      border-radius:8px;
+      padding:12px; border-radius:8px;
       box-shadow:0 2px 10px rgba(0,0,0,0.15);
       font-family: Arial, sans-serif;
-      font-size:13px;
-      max-width:380px;
+      font-size:13px; max-width:380px;
       z-index:1000;
     }
-
-    .row { display:flex; gap:6px; margin-bottom:6px; }
-    .row > * { flex:1; }
-    input, button, select { padding:8px; font-size:13px; border:1px solid #ccc; border-radius:4px; }
-    button { cursor:pointer; background:#fdfdfd; transition: background 0.2s; }
-    button:hover { background:#f0f0f0; }
-    button:disabled { opacity:0.5; cursor:not-allowed; }
-
-    .btn-danger { background:#ffeeee; border-color:#ffcccc; color:#cc0000; font-weight:bold; }
-    .btn-danger:hover { background:#ffdddd; }
-
-    .hr { height:1px; background:#ddd; margin:8px 0; }
-    .status { margin-top:6px; font-size:12px; color:#444; font-weight:bold; min-height:1.2em; }
-    .small { font-size:11px; opacity:0.75; margin-top:5px; line-height:1.3; }
-    .small b { opacity: 0.95; }
-
-    #coords-info {
-      position:absolute;
-      bottom:10px; right:10px;
-      background: rgba(255,255,255,0.85);
-      padding:5px 10px;
-      border-radius:4px;
-      font-family: 'Courier New', monospace;
-      font-size:12px;
-      pointer-events:none;
-      border:1px solid #bbb;
-      z-index:1000;
-      box-shadow:0 1px 5px rgba(0,0,0,0.1);
-    }
-
-    /* Overlay login */
-    .overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.55);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 2000;
-    }
-    .modal {
-      width: min(480px, calc(100vw - 24px));
-      background: #fff;
-      border-radius: 10px;
-      box-shadow: 0 10px 40px rgba(0,0,0,0.35);
-      padding: 14px;
-      font-family: Arial, sans-serif;
-    }
-    .modal h3 { margin: 0 0 10px; font-size: 16px; }
-    .modal .actions { display:flex; gap:8px; justify-content:flex-end; }
-    .pill {
+    .row{ display:flex; gap:6px; margin-bottom:6px; }
+    .row > *{ flex:1; }
+    input, button, select{ padding:8px; font-size:13px; border:1px solid #ccc; border-radius:4px; }
+    button{ cursor:pointer; background:#fdfdfd; transition: background 0.2s; }
+    button:hover{ background:#f0f0f0; }
+    button:disabled{ opacity:0.5; cursor:not-allowed; }
+    .btn-danger{ background:#ffeeee; border-color:#ffcccc; color:#cc0000; font-weight:bold; }
+    .btn-danger:hover{ background:#ffdddd; }
+    .hr{ height:1px; background:#ddd; margin:8px 0; }
+    .status{ margin-top:6px; font-size:12px; color:#444; font-weight:bold; min-height:1.2em; }
+    .small{ font-size:11px; opacity:0.75; margin-top:5px; line-height:1.3; }
+    .pill{
       display:inline-block; padding:2px 8px; border-radius:999px;
       border:1px solid #ddd; background:#f7f7f7; font-size:12px;
     }
 
-    /* Pannello admin utenti */
-    #adminBox {
+    #coords-info{
+      position:absolute; bottom:10px; right:10px;
+      background: rgba(255,255,255,0.85);
+      padding:5px 10px; border-radius:4px;
+      font-family: 'Courier New', monospace;
+      font-size:12px; pointer-events:none;
+      border:1px solid #bbb; z-index:1000;
+      box-shadow:0 1px 5px rgba(0,0,0,0.1);
+    }
+
+    /* login overlay */
+    .overlay{
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.55);
+      display: none; align-items: center; justify-content: center;
+      z-index: 2000;
+    }
+    .modal{
+      width: min(480px, calc(100vw - 24px));
+      background: #fff; border-radius: 10px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.35);
+      padding: 14px;
+      font-family: Arial, sans-serif;
+    }
+    .modal h3{ margin: 0 0 10px; font-size: 16px; }
+    .modal .actions{ display:flex; gap:8px; justify-content:flex-end; }
+
+    #adminBox{
       display:none;
-      margin-top:10px;
-      padding-top:10px;
+      margin-top:10px; padding-top:10px;
       border-top:1px dashed #ccc;
     }
-    #adminBox .title {
-      font-weight:bold;
-      margin-bottom:6px;
-    }
+    #adminBox .title{ font-weight:bold; margin-bottom:6px; }
   </style>
 </head>
 
@@ -100,7 +80,6 @@
   <div id="coords-info">UTM32N -> X: - | Y: -</div>
 
   <div class="panel">
-
     <div class="row">
       <button id="btnAuth">Login</button>
       <button id="btnLogout" disabled>Logout</button>
@@ -131,7 +110,7 @@
     </div>
 
     <div class="row">
-      <button id="btnDeletePF" class="btn-danger">Elimina selezionati</button>
+      <button id="btnDeletePF" class="btn-danger" disabled>Elimina selezionati</button>
     </div>
 
     <div class="hr"></div>
@@ -144,34 +123,22 @@
     <div class="status" id="status"></div>
     <div class="small" id="userInfo"></div>
 
-    <!-- PANNELLO ADMIN UTENTI -->
     <div id="adminBox">
       <div class="title">Pannello Admin - Crea utente</div>
-
-      <div class="row">
-        <input id="newUser" placeholder="Nuovo username (es. luca)" />
-      </div>
-
-      <div class="row">
-        <input id="newPass" placeholder="Nuova password" />
-      </div>
-
+      <div class="row"><input id="newUser" placeholder="Nuovo username (es. luca)"></div>
+      <div class="row"><input id="newPass" placeholder="Nuova password"></div>
       <div class="row">
         <select id="newRole">
           <option value="user">user (può inserire PF)</option>
           <option value="admin">admin (può eliminare PF)</option>
         </select>
       </div>
-
-      <div class="row">
-        <button id="btnCreateUser">Crea utente</button>
-      </div>
-
+      <div class="row"><button id="btnCreateUser">Crea utente</button></div>
       <div class="small" id="adminMsg" style="min-height:14px;"></div>
     </div>
 
     <div class="small">
-      PF: lettura libera (ospite). Inserimento: serve login. Eliminazione: solo admin.
+      Ospite: vede PF. User/Admin: può creare PF. Solo admin: elimina PF.
     </div>
   </div>
 
@@ -182,571 +149,509 @@
       <div class="small" style="margin-bottom:10px;">
         Entra con username e password oppure continua come ospite.
       </div>
-      <div class="row">
-        <input id="loginUser" placeholder="Username" autocomplete="username">
-      </div>
-      <div class="row">
-        <input id="loginPass" placeholder="Password" type="password" autocomplete="current-password">
-      </div>
+      <div class="row"><input id="loginUser" placeholder="Username" autocomplete="username"></div>
+      <div class="row"><input id="loginPass" placeholder="Password" type="password" autocomplete="current-password"></div>
       <div class="small" id="loginMsg" style="min-height:16px;color:#b00;"></div>
       <div class="actions">
         <button id="btnGuest">Entra come ospite</button>
         <button id="btnLogin">Login</button>
       </div>
       <div class="small" style="margin-top:10px;">
-        Ruoli: <span class="pill">admin</span> può eliminare PF; <span class="pill">user</span> può aggiungere PF.
+        Ruoli: <span class="pill">admin</span> elimina; <span class="pill">user</span> inserisce.
       </div>
     </div>
   </div>
 
   <script>
-  /* =========================
-     CONFIG API (il tuo worker)
-     ========================= */
-  const API_BASE = "https://catasto-api.princifranci.workers.dev";
-  const TOKEN_KEY = "catasto_token_v1";
+    const API_BASE = "https://catasto-api.princifranci.workers.dev";
+    const TOKEN_KEY = "catasto_token_v1";
 
-  /* =========================
-     UI helpers
-     ========================= */
-  const statusEl = document.getElementById("status");
-  function setStatus(msg){ statusEl.textContent = msg || ""; }
+    const statusEl = document.getElementById("status");
+    function setStatus(msg){ statusEl.textContent = msg || ""; }
 
-  function escapeHtml(s){
-    return String(s).replace(/[&<>"']/g, (c) => ({
-      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
-    }[c]));
-  }
-
-  /* =========================
-     SESSION (token)
-     ========================= */
-  const session = { username:"Ospite", role:"guest", token:null };
-
-  function setToken(token){
-    session.token = token || null;
-    if(token) localStorage.setItem(TOKEN_KEY, token);
-    else localStorage.removeItem(TOKEN_KEY);
-  }
-
-  function authHeaders(){
-    const h = { "Content-Type":"application/json" };
-    if(session.token) h["Authorization"] = "Bearer " + session.token;
-    return h;
-  }
-
-  async function apiMe(){
-    const token = localStorage.getItem(TOKEN_KEY);
-    if(token) session.token = token;
-
-    const res = await fetch(API_BASE + "/api/me", {
-      method: "GET",
-      headers: session.token ? { "Authorization":"Bearer " + session.token } : {}
-    });
-    const data = await res.json();
-    const u = data?.user || { username:"Ospite", role:"guest" };
-    session.username = u.username || "Ospite";
-    session.role = u.role || "guest";
-  }
-
-  function updateAuthUI(){
-    const userInfoEl = document.getElementById("userInfo");
-    const btnAuth = document.getElementById("btnAuth");
-    const btnLogout = document.getElementById("btnLogout");
-    const btnDeletePF = document.getElementById("btnDeletePF");
-    const adminBox = document.getElementById("adminBox");
-
-    userInfoEl.innerHTML = `Utente: <b>${escapeHtml(session.username)}</b> <span class="pill">${escapeHtml(session.role)}</span>`;
-
-    // login/logout buttons
-    btnLogout.disabled = (session.role === "guest");
-    btnAuth.disabled = (session.role !== "guest");
-
-    // delete only admin
-    btnDeletePF.disabled = (session.role !== "admin");
-    btnDeletePF.title = (session.role !== "admin") ? "Solo admin può eliminare PF" : "";
-
-    // admin panel
-    adminBox.style.display = (session.role === "admin") ? "block" : "none";
-  }
-
-  /* =========================
-     LOGIN overlay
-     ========================= */
-  const overlay = document.getElementById("loginOverlay");
-  const loginMsg = document.getElementById("loginMsg");
-
-  function showLogin(){
-    document.getElementById("loginUser").value = "";
-    document.getElementById("loginPass").value = "";
-    loginMsg.textContent = "";
-    overlay.style.display = "flex";
-  }
-  function hideLogin(){ overlay.style.display = "none"; }
-
-  document.getElementById("btnAuth").addEventListener("click", showLogin);
-
-  document.getElementById("btnGuest").addEventListener("click", async () => {
-    setToken(null);
-    session.username = "Ospite";
-    session.role = "guest";
-    updateAuthUI();
-    hideLogin();
-    setStatus("Modalità ospite.");
-    await loadPFCloud();
-  });
-
-  document.getElementById("btnLogin").addEventListener("click", async () => {
-    const username = document.getElementById("loginUser").value.trim();
-    const password = document.getElementById("loginPass").value;
-
-    if(!username || !password){
-      loginMsg.textContent = "Inserisci username e password.";
-      return;
+    function escapeHtml(s){
+      return String(s).replace(/[&<>"']/g, (c) => ({
+        "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+      }[c]));
     }
 
-    try{
-      const res = await fetch(API_BASE + "/api/login", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ username, password })
+    const session = { username:"Ospite", role:"guest", token:null };
+
+    function setToken(token){
+      session.token = token || null;
+      if(token) localStorage.setItem(TOKEN_KEY, token);
+      else localStorage.removeItem(TOKEN_KEY);
+    }
+
+    function authHeaders(){
+      const h = { "Content-Type":"application/json" };
+      if(session.token) h["Authorization"] = "Bearer " + session.token;
+      return h;
+    }
+
+    async function apiMe(){
+      const token = localStorage.getItem(TOKEN_KEY);
+      if(token) session.token = token;
+
+      const res = await fetch(API_BASE + "/api/me", {
+        method: "GET",
+        headers: session.token ? { "Authorization":"Bearer " + session.token } : {}
       });
       const data = await res.json();
+      const u = data?.user || { username:"Ospite", role:"guest" };
+      session.username = u.username || "Ospite";
+      session.role = u.role || "guest";
+    }
 
-      if(!res.ok){
-        loginMsg.textContent = data?.error || "Login fallito.";
-        return;
-      }
+    function updateAuthUI(){
+      document.getElementById("userInfo").innerHTML =
+        `Utente: <b>${escapeHtml(session.username)}</b> <span class="pill">${escapeHtml(session.role)}</span>`;
 
-      setToken(data.token);
-      session.username = data.user.username;
-      session.role = data.user.role;
+      document.getElementById("btnLogout").disabled = (session.role === "guest");
+      document.getElementById("btnAuth").disabled = (session.role !== "guest");
 
+      const delBtn = document.getElementById("btnDeletePF");
+      delBtn.disabled = (session.role !== "admin");
+      delBtn.title = (session.role !== "admin") ? "Solo admin può eliminare PF" : "";
+
+      document.getElementById("adminBox").style.display = (session.role === "admin") ? "block" : "none";
+    }
+
+    /* overlay */
+    const overlay = document.getElementById("loginOverlay");
+    const loginMsg = document.getElementById("loginMsg");
+    function showLogin(){
+      document.getElementById("loginUser").value = "";
+      document.getElementById("loginPass").value = "";
+      loginMsg.textContent = "";
+      overlay.style.display = "flex";
+    }
+    function hideLogin(){ overlay.style.display = "none"; }
+
+    document.getElementById("btnAuth").addEventListener("click", showLogin);
+
+    document.getElementById("btnGuest").addEventListener("click", async () => {
+      setToken(null);
+      session.username = "Ospite";
+      session.role = "guest";
       updateAuthUI();
       hideLogin();
-      setStatus("Login eseguito.");
+      setStatus("Modalità ospite.");
       await loadPFCloud();
-    } catch(e){
-      console.error(e);
-      loginMsg.textContent = "Errore di rete.";
-    }
-  });
+    });
 
-  document.getElementById("btnLogout").addEventListener("click", async () => {
-    if(!confirm("Vuoi fare logout?")) return;
-    try{
-      if(session.token){
-        await fetch(API_BASE + "/api/logout", {
+    document.getElementById("btnLogin").addEventListener("click", async () => {
+      const username = document.getElementById("loginUser").value.trim();
+      const password = document.getElementById("loginPass").value;
+      if(!username || !password){
+        loginMsg.textContent = "Inserisci username e password.";
+        return;
+      }
+      try{
+        const res = await fetch(API_BASE + "/api/login", {
           method:"POST",
-          headers: { "Authorization":"Bearer " + session.token }
+          headers:{ "Content-Type":"application/json" },
+          body: JSON.stringify({ username, password })
         });
+        const data = await res.json();
+        if(!res.ok){
+          loginMsg.textContent = data?.error || "Login fallito.";
+          return;
+        }
+        setToken(data.token);
+        session.username = data.user.username;
+        session.role = data.user.role;
+        updateAuthUI();
+        hideLogin();
+        setStatus("Login eseguito.");
+        await loadPFCloud();
+      } catch(e){
+        console.error(e);
+        loginMsg.textContent = "Errore di rete.";
       }
-    } catch {}
-    setToken(null);
-    session.username = "Ospite";
-    session.role = "guest";
-    updateAuthUI();
-    setStatus("Logout eseguito.");
-    await loadPFCloud();
-  });
+    });
 
-  /* =========================
-     OPENLAYERS
-     ========================= */
-  proj4.defs("EPSG:25832","+proj=utm +zone=32 +ellps=GRS80 +units=m +no_defs");
-  ol.proj.proj4.register(proj4);
-  const projection = ol.proj.get("EPSG:25832");
+    document.getElementById("btnLogout").addEventListener("click", async () => {
+      if(!confirm("Vuoi fare logout?")) return;
+      try{
+        if(session.token){
+          await fetch(API_BASE + "/api/logout", {
+            method:"POST",
+            headers: { "Authorization":"Bearer " + session.token }
+          });
+        }
+      } catch {}
+      setToken(null);
+      session.username = "Ospite";
+      session.role = "guest";
+      updateAuthUI();
+      setStatus("Logout eseguito.");
+      await loadPFCloud();
+    });
 
-  // Milano
-  const center = ol.proj.transform([9.1900, 45.4642], "EPSG:4326", "EPSG:25832");
+    /* OpenLayers */
+    proj4.defs("EPSG:25832","+proj=utm +zone=32 +ellps=GRS80 +units=m +no_defs");
+    ol.proj.proj4.register(proj4);
+    const projection = ol.proj.get("EPSG:25832");
 
-  const wmsLayer = new ol.layer.Tile({
-    source: new ol.source.TileWMS({
-      url: "https://catastovisual.princifranci.workers.dev/",
-      params: {
-        SERVICE: "WMS",
-        VERSION: "1.3.0",
-        REQUEST: "GetMap",
-        LAYERS: "CP.CadastralZoning,acque,strade,CP.CadastralParcel,fabbricati,codice_plla,simbolo_graffa",
-        STYLES: "",
-        FORMAT: "image/png",
-        TRANSPARENT: true,
-        TILED: true
-      },
-      crossOrigin: "anonymous"
-    })
-  });
+    // Milano
+    const center = ol.proj.transform([9.1900, 45.4642], "EPSG:4326", "EPSG:25832");
 
-  function buildPFLabel(feature){
-    const name = feature.get("name") || "";
-    const by = feature.get("by") || "";
-    return by ? `${name} (${by})` : name;
-  }
+    const wmsLayer = new ol.layer.Tile({
+      source: new ol.source.TileWMS({
+        url: "https://catastovisual.princifranci.workers.dev/",
+        params: {
+          SERVICE: "WMS",
+          VERSION: "1.3.0",
+          REQUEST: "GetMap",
+          LAYERS: "province,comuni,fogli,CP.CadastralZoning,acque,strade,CP.CadastralParcel,fabbricati,codice_plla,simbolo_graffa",
+          STYLES: "",
+          FORMAT: "image/png",
+          TRANSPARENT: true,
+          TILED: true
+        },
+        crossOrigin: "anonymous"
+      })
+    });
 
-  const pfStyle = (feature) => new ol.style.Style({
-    image: new ol.style.Circle({
-      radius: 6,
-      fill: new ol.style.Fill({ color: "rgba(220,0,0,0.9)" }),
-      stroke: new ol.style.Stroke({ color: "#fff", width: 2 })
-    }),
-    text: new ol.style.Text({
-      font: "bold 12px Arial",
-      offsetY: -15,
-      text: buildPFLabel(feature),
-      fill: new ol.style.Fill({ color: "#000" }),
-      stroke: new ol.style.Stroke({ color: "#fff", width: 3 })
-    })
-  });
+    function buildPFLabel(feature){
+      const name = feature.get("name") || "";
+      const by = feature.get("by") || "";
+      return by ? `${name} (${by})` : name;
+    }
 
-  const selectedPFStyle = (feature) => new ol.style.Style({
-    image: new ol.style.Circle({
-      radius: 8,
-      fill: new ol.style.Fill({ color: "#0078ff" }),
-      stroke: new ol.style.Stroke({ color: "#fff", width: 2 })
-    }),
-    text: new ol.style.Text({
-      font: "bold 12px Arial",
-      offsetY: -15,
-      text: buildPFLabel(feature),
-      fill: new ol.style.Fill({ color: "#0078ff" }),
-      stroke: new ol.style.Stroke({ color: "#fff", width: 3 })
-    })
-  });
+    const pfStyle = (feature) => new ol.style.Style({
+      image: new ol.style.Circle({
+        radius: 6,
+        fill: new ol.style.Fill({ color: "rgba(220,0,0,0.9)" }),
+        stroke: new ol.style.Stroke({ color: "#fff", width: 2 })
+      }),
+      text: new ol.style.Text({
+        font: "bold 12px Arial",
+        offsetY: -15,
+        text: buildPFLabel(feature),
+        fill: new ol.style.Fill({ color: "#000" }),
+        stroke: new ol.style.Stroke({ color: "#fff", width: 3 })
+      })
+    });
 
-  const pfSource = new ol.source.Vector();
-  const pfLayer = new ol.layer.Vector({ source: pfSource, style: pfStyle });
+    const selectedPFStyle = (feature) => new ol.style.Style({
+      image: new ol.style.Circle({
+        radius: 8,
+        fill: new ol.style.Fill({ color: "#0078ff" }),
+        stroke: new ol.style.Stroke({ color: "#fff", width: 2 })
+      }),
+      text: new ol.style.Text({
+        font: "bold 12px Arial",
+        offsetY: -15,
+        text: buildPFLabel(feature),
+        fill: new ol.style.Fill({ color: "#0078ff" }),
+        stroke: new ol.style.Stroke({ color: "#fff", width: 3 })
+      })
+    });
 
-  const selectedSource = new ol.source.Vector();
-  const selectedLayer = new ol.layer.Vector({ source: selectedSource, style: selectedPFStyle });
+    const pfSource = new ol.source.Vector();
+    const pfLayer = new ol.layer.Vector({ source: pfSource, style: pfStyle });
 
-  const tempSource = new ol.source.Vector();
-  const tempLayer = new ol.layer.Vector({
-    source: tempSource,
-    style: new ol.style.Style({
-      stroke: new ol.style.Stroke({ color: "red", width: 2.5 }),
-      fill: new ol.style.Fill({ color: "rgba(255,0,0,0.15)" })
-    })
-  });
+    const selectedSource = new ol.source.Vector();
+    const selectedLayer = new ol.layer.Vector({ source: selectedSource, style: selectedPFStyle });
 
-  const map = new ol.Map({
-    target: "map",
-    layers: [wmsLayer, tempLayer, pfLayer, selectedLayer],
-    view: new ol.View({
-      projection,
-      center,
-      zoom: 17,
-      minZoom: 6,
-      maxZoom: 22
-    })
-  });
+    const tempSource = new ol.source.Vector();
+    const tempLayer = new ol.layer.Vector({
+      source: tempSource,
+      style: new ol.style.Style({
+        stroke: new ol.style.Stroke({ color: "red", width: 2.5 }),
+        fill: new ol.style.Fill({ color: "rgba(255,0,0,0.15)" })
+      })
+    });
 
-  const coordsEl = document.getElementById("coords-info");
-  map.on("pointermove", (evt) => {
-    if (evt.dragging) return;
-    const c = evt.coordinate;
-    coordsEl.textContent = `UTM32N -> X: ${c[0].toFixed(2)} | Y: ${c[1].toFixed(2)}`;
-  });
+    const map = new ol.Map({
+      target: "map",
+      layers: [wmsLayer, tempLayer, pfLayer, selectedLayer],
+      view: new ol.View({ projection, center, zoom: 17, minZoom: 6, maxZoom: 22 })
+    });
 
-  /* =========================
-     PF: cloud
-     ========================= */
-  const selectedIds = new Set();
-  let pfMode = false;
+    const coordsEl = document.getElementById("coords-info");
+    map.on("pointermove", (evt) => {
+      if(evt.dragging) return;
+      const c = evt.coordinate;
+      coordsEl.textContent = `UTM32N -> X: ${c[0].toFixed(2)} | Y: ${c[1].toFixed(2)}`;
+    });
 
-  const btnModePF = document.getElementById("btnModePF");
-  function updatePFButton(){
-    btnModePF.textContent = `Modalità PF: ${pfMode ? "ON" : "OFF"}`;
-  }
-  updatePFButton();
+    /* PF cloud */
+    const selectedIds = new Set();
+    let pfMode = false;
 
-  btnModePF.addEventListener("click", () => {
-    pfMode = !pfMode;
+    const btnModePF = document.getElementById("btnModePF");
+    function updatePFButton(){ btnModePF.textContent = `Modalità PF: ${pfMode ? "ON" : "OFF"}`; }
     updatePFButton();
-    setStatus(pfMode ? "Modalità inserimento PF attiva" : "Modalità inserimento PF disattiva");
-  });
 
-  function refreshSelection(){
-    selectedSource.clear();
-    for(const f of pfSource.getFeatures()){
-      if(selectedIds.has(f.getId())){
-        const clone = f.clone();
-        clone.setId(f.getId());
-        selectedSource.addFeature(clone);
-      }
-    }
-    setStatus(`Selezionati: ${selectedIds.size} PF`);
-  }
+    btnModePF.addEventListener("click", () => {
+      pfMode = !pfMode;
+      updatePFButton();
+      setStatus(pfMode ? "Modalità inserimento PF attiva" : "Modalità inserimento PF disattiva");
+    });
 
-  async function loadPFCloud(){
-    try{
-      const res = await fetch(API_BASE + "/api/pf");
-      const data = await res.json();
-      const items = data?.items || [];
-
-      pfSource.clear();
+    function refreshSelection(){
       selectedSource.clear();
-      selectedIds.clear();
-
-      for(const it of items){
-        const f = new ol.Feature({
-          geometry: new ol.geom.Point([Number(it.x), Number(it.y)]),
-          name: String(it.name || ""),
-          by: String(it.by || "")
-        });
-        f.setId(it.id);
-        pfSource.addFeature(f);
+      for(const f of pfSource.getFeatures()){
+        if(selectedIds.has(f.getId())){
+          const clone = f.clone();
+          clone.setId(f.getId());
+          selectedSource.addFeature(clone);
+        }
       }
-
-      setStatus(`PF cloud: ${items.length}`);
-    } catch(e){
-      console.error(e);
-      setStatus("Errore caricamento PF cloud");
-    }
-  }
-
-  document.getElementById("btnReloadPF").addEventListener("click", loadPFCloud);
-
-  async function createPFCloud(name, x, y){
-    const res = await fetch(API_BASE + "/api/pf", {
-      method:"POST",
-      headers: authHeaders(),
-      body: JSON.stringify({ name, x, y })
-    });
-    const data = await res.json();
-    if(!res.ok){
-      alert(data?.error || "Errore creazione PF");
-      return null;
-    }
-    return data.item;
-  }
-
-  async function deletePFCloud(id){
-    const res = await fetch(API_BASE + "/api/pf/" + encodeURIComponent(id), {
-      method:"DELETE",
-      headers: session.token ? { "Authorization":"Bearer " + session.token } : {}
-    });
-    const data = await res.json();
-    if(!res.ok){
-      alert(data?.error || "Errore eliminazione PF");
-      return false;
-    }
-    return true;
-  }
-
-  map.on("singleclick", async (evt) => {
-    // selezione se clic su PF
-    let found = null;
-    map.forEachFeatureAtPixel(evt.pixel, (f, l) => {
-      if(l === pfLayer || l === selectedLayer){ found = f; return true; }
-    });
-
-    if(found){
-      const id = found.getId();
-      if(selectedIds.has(id)) selectedIds.delete(id);
-      else selectedIds.add(id);
-      refreshSelection();
-      return;
+      setStatus(`Selezionati: ${selectedIds.size} PF`);
     }
 
-    // inserimento PF
-    if(!pfMode) return;
+    async function loadPFCloud(){
+      try{
+        const res = await fetch(API_BASE + "/api/pf");
+        const data = await res.json();
+        const items = data?.items || [];
 
-    if(session.role !== "user" && session.role !== "admin"){
-      alert("Per inserire PF devi fare login (non come ospite).");
-      return;
-    }
+        pfSource.clear();
+        selectedSource.clear();
+        selectedIds.clear();
 
-    const name = prompt("Nome del Punto Fiduciale (PF):");
-    if(!name || !name.trim()) return;
-
-    const x = evt.coordinate[0];
-    const y = evt.coordinate[1];
-
-    const item = await createPFCloud(name.trim(), x, y);
-    if(!item) return;
-
-    // aggiungo in mappa senza ricaricare tutto
-    const f = new ol.Feature({
-      geometry: new ol.geom.Point([item.x, item.y]),
-      name: item.name,
-      by: item.by
-    });
-    f.setId(item.id);
-    pfSource.addFeature(f);
-
-    setStatus("PF creato (cloud).");
-  });
-
-  document.getElementById("btnClearSel").addEventListener("click", () => {
-    selectedIds.clear();
-    refreshSelection();
-    setStatus("Selezione svuotata");
-  });
-
-  document.getElementById("btnDeletePF").addEventListener("click", async () => {
-    if(session.role !== "admin"){
-      alert("Solo admin può eliminare PF.");
-      return;
-    }
-    if(selectedIds.size === 0){
-      alert("Seleziona prima uno o più PF.");
-      return;
-    }
-    if(!confirm(`Eliminare ${selectedIds.size} PF selezionati?`)) return;
-
-    const ids = Array.from(selectedIds);
-    let okCount = 0;
-
-    for(const id of ids){
-      const ok = await deletePFCloud(id);
-      if(ok) okCount++;
-    }
-
-    await loadPFCloud();
-    setStatus(`Eliminati: ${okCount}/${ids.length}`);
-  });
-
-  /* =========================
-     LINEE/POLIGONI temporanei
-     ========================= */
-  document.getElementById("btnConnect").addEventListener("click", () => {
-    const feats = pfSource.getFeatures().filter(f => selectedIds.has(f.getId()));
-    if(feats.length < 2) return alert("Seleziona almeno 2 punti per collegarli.");
-    const coords = feats.map(f => f.getGeometry().getCoordinates());
-    if(feats.length === 2){
-      tempSource.addFeature(new ol.Feature(new ol.geom.LineString(coords)));
-      setStatus("Linea creata (temporanea).");
-    } else {
-      const ring = [...coords, coords[0]];
-      tempSource.addFeature(new ol.Feature(new ol.geom.Polygon([ring])));
-      setStatus("Poligono creato (temporaneo).");
-    }
-  });
-
-  let drawInt = null;
-  const btnStopDraw = document.getElementById("btnStopDraw");
-
-  document.getElementById("btnDrawPoly").addEventListener("click", () => {
-    if(drawInt) return;
-    drawInt = new ol.interaction.Draw({ source: tempSource, type: "Polygon" });
-    map.addInteraction(drawInt);
-    btnStopDraw.disabled = false;
-    setStatus("Disegno attivo (doppio click per chiudere)");
-  });
-
-  btnStopDraw.addEventListener("click", () => {
-    if(drawInt){ map.removeInteraction(drawInt); drawInt = null; }
-    btnStopDraw.disabled = true;
-    setStatus("Disegno interrotto.");
-  });
-
-  document.getElementById("btnClearTemp").addEventListener("click", () => {
-    tempSource.clear();
-    setStatus("Disegni temporanei rimossi.");
-  });
-
-  /* =========================
-     CERCA COMUNE
-     ========================= */
-  document.getElementById("btnComune").addEventListener("click", async () => {
-    const q = document.getElementById("qComune").value.trim();
-    if(!q) return;
-    setStatus("Ricerca in corso...");
-    try{
-      const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=it&q=${encodeURIComponent(q)}`;
-      const res = await fetch(url, { headers: { "Accept": "application/json" }});
-      const data = await res.json();
-      if(data?.length){
-        const c = ol.proj.transform([parseFloat(data[0].lon), parseFloat(data[0].lat)], "EPSG:4326", "EPSG:25832");
-        map.getView().animate({ center: c, zoom: 17, duration: 800 });
-        setStatus(`Mappa spostata su: ${data[0].display_name}`);
-      } else {
-        alert("Comune non trovato.");
-        setStatus("Ricerca fallita.");
+        for(const it of items){
+          const f = new ol.Feature({
+            geometry: new ol.geom.Point([Number(it.x), Number(it.y)]),
+            name: String(it.name || ""),
+            by: String(it.by || "")
+          });
+          f.setId(it.id);
+          pfSource.addFeature(f);
+        }
+        setStatus(`PF cloud: ${items.length}`);
+      } catch(e){
+        console.error(e);
+        setStatus("Errore caricamento PF cloud");
       }
-    } catch(e){
-      console.error(e);
-      alert("Errore durante la ricerca.");
-      setStatus("Errore ricerca.");
-    }
-  });
-
-  /* =========================
-     EXPORT PF (cloud -> file)
-     ========================= */
-  document.getElementById("btnExport").addEventListener("click", async () => {
-    try{
-      const res = await fetch(API_BASE + "/api/pf");
-      const data = await res.json();
-      const items = data?.items || [];
-      const blob = new Blob([JSON.stringify(items, null, 2)], {type:"application/json"});
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = "pf-cloud.json";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(a.href);
-      setStatus("Export PF cloud completato.");
-    } catch(e){
-      console.error(e);
-      setStatus("Errore export PF cloud");
-    }
-  });
-
-  /* =========================
-     PANNELLO ADMIN: crea utente
-     ========================= */
-  document.getElementById("btnCreateUser").addEventListener("click", async () => {
-    const msg = document.getElementById("adminMsg");
-    msg.style.color = "#b00";
-    msg.textContent = "";
-
-    const u = document.getElementById("newUser").value.trim();
-    const p = document.getElementById("newPass").value;
-    const r = document.getElementById("newRole").value;
-
-    if(!u || !p){
-      msg.textContent = "Inserisci username e password.";
-      return;
     }
 
-    try{
-      const res = await fetch(API_BASE + "/api/admin/create-user", {
+    document.getElementById("btnReloadPF").addEventListener("click", loadPFCloud);
+
+    async function createPFCloud(name, x, y){
+      const res = await fetch(API_BASE + "/api/pf", {
         method:"POST",
         headers: authHeaders(),
-        body: JSON.stringify({ username: u, password: p, role: r })
+        body: JSON.stringify({ name, x, y })
       });
       const data = await res.json();
-
       if(!res.ok){
-        msg.textContent = data?.error || "Errore creazione utente.";
+        alert(data?.error || "Errore creazione PF");
+        return null;
+      }
+      return data.item;
+    }
+
+    async function deletePFCloud(id){
+      const res = await fetch(API_BASE + "/api/pf/" + encodeURIComponent(id), {
+        method:"DELETE",
+        headers: session.token ? { "Authorization":"Bearer " + session.token } : {}
+      });
+      const data = await res.json();
+      if(!res.ok){
+        alert(data?.error || "Errore eliminazione PF");
+        return false;
+      }
+      return true;
+    }
+
+    map.on("singleclick", async (evt) => {
+      let found = null;
+      map.forEachFeatureAtPixel(evt.pixel, (f, l) => {
+        if(l === pfLayer || l === selectedLayer){ found = f; return true; }
+      });
+
+      if(found){
+        const id = found.getId();
+        if(selectedIds.has(id)) selectedIds.delete(id);
+        else selectedIds.add(id);
+        refreshSelection();
         return;
       }
 
-      msg.style.color = "#060";
-      msg.textContent = `Creato: ${data.user.username} (${data.user.role})`;
+      if(!pfMode) return;
 
-      document.getElementById("newUser").value = "";
-      document.getElementById("newPass").value = "";
-      document.getElementById("newRole").value = "user";
-    } catch(e){
-      console.error(e);
-      msg.textContent = "Errore di rete.";
-    }
-  });
+      if(session.role !== "user" && session.role !== "admin"){
+        alert("Per inserire PF devi fare login (non come ospite).");
+        return;
+      }
 
-  /* =========================
-     AVVIO
-     ========================= */
-  (async () => {
-    await apiMe();
-    updateAuthUI();
-    // carico PF cloud sempre
-    await loadPFCloud();
-    // se non sei loggato, mostra login (con possibilità ospite)
-    if(session.role === "guest") showLogin();
-  })();
+      const name = prompt("Nome del Punto Fiduciale (PF):");
+      if(!name || !name.trim()) return;
+
+      const item = await createPFCloud(name.trim(), evt.coordinate[0], evt.coordinate[1]);
+      if(!item) return;
+
+      const f = new ol.Feature({
+        geometry: new ol.geom.Point([item.x, item.y]),
+        name: item.name,
+        by: item.by
+      });
+      f.setId(item.id);
+      pfSource.addFeature(f);
+
+      setStatus("PF creato (cloud).");
+    });
+
+    document.getElementById("btnClearSel").addEventListener("click", () => {
+      selectedIds.clear();
+      refreshSelection();
+      setStatus("Selezione svuotata");
+    });
+
+    document.getElementById("btnDeletePF").addEventListener("click", async () => {
+      if(session.role !== "admin"){
+        alert("Solo admin può eliminare PF.");
+        return;
+      }
+      if(selectedIds.size === 0){
+        alert("Seleziona prima uno o più PF.");
+        return;
+      }
+      if(!confirm(`Eliminare ${selectedIds.size} PF selezionati?`)) return;
+
+      const ids = Array.from(selectedIds);
+      let okCount = 0;
+      for(const id of ids){
+        const ok = await deletePFCloud(id);
+        if(ok) okCount++;
+      }
+      await loadPFCloud();
+      setStatus(`Eliminati: ${okCount}/${ids.length}`);
+    });
+
+    /* linee/poligoni temporanei */
+    document.getElementById("btnConnect").addEventListener("click", () => {
+      const feats = pfSource.getFeatures().filter(f => selectedIds.has(f.getId()));
+      if(feats.length < 2) return alert("Seleziona almeno 2 punti per collegarli.");
+      const coords = feats.map(f => f.getGeometry().getCoordinates());
+      if(feats.length === 2){
+        tempSource.addFeature(new ol.Feature(new ol.geom.LineString(coords)));
+        setStatus("Linea creata (temporanea).");
+      } else {
+        const ring = [...coords, coords[0]];
+        tempSource.addFeature(new ol.Feature(new ol.geom.Polygon([ring])));
+        setStatus("Poligono creato (temporaneo).");
+      }
+    });
+
+    let drawInt = null;
+    const btnStopDraw = document.getElementById("btnStopDraw");
+
+    document.getElementById("btnDrawPoly").addEventListener("click", () => {
+      if(drawInt) return;
+      drawInt = new ol.interaction.Draw({ source: tempSource, type: "Polygon" });
+      map.addInteraction(drawInt);
+      btnStopDraw.disabled = false;
+      setStatus("Disegno attivo (doppio click per chiudere)");
+    });
+
+    btnStopDraw.addEventListener("click", () => {
+      if(drawInt){ map.removeInteraction(drawInt); drawInt = null; }
+      btnStopDraw.disabled = true;
+      setStatus("Disegno interrotto.");
+    });
+
+    document.getElementById("btnClearTemp").addEventListener("click", () => {
+      tempSource.clear();
+      setStatus("Disegni temporanei rimossi.");
+    });
+
+    /* cerca comune */
+    document.getElementById("btnComune").addEventListener("click", async () => {
+      const q = document.getElementById("qComune").value.trim();
+      if(!q) return;
+      setStatus("Ricerca in corso...");
+      try{
+        const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=it&q=${encodeURIComponent(q)}`;
+        const res = await fetch(url, { headers: { "Accept": "application/json" }});
+        const data = await res.json();
+        if(data?.length){
+          const c = ol.proj.transform([parseFloat(data[0].lon), parseFloat(data[0].lat)], "EPSG:4326", "EPSG:25832");
+          map.getView().animate({ center: c, zoom: 17, duration: 800 });
+          setStatus(`Mappa spostata su: ${data[0].display_name}`);
+        } else {
+          alert("Comune non trovato.");
+          setStatus("Ricerca fallita.");
+        }
+      } catch(e){
+        console.error(e);
+        alert("Errore durante la ricerca.");
+        setStatus("Errore ricerca.");
+      }
+    });
+
+    /* export PF cloud */
+    document.getElementById("btnExport").addEventListener("click", async () => {
+      try{
+        const res = await fetch(API_BASE + "/api/pf");
+        const data = await res.json();
+        const items = data?.items || [];
+        const blob = new Blob([JSON.stringify(items, null, 2)], {type:"application/json"});
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "pf-cloud.json";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(a.href);
+        setStatus("Export PF cloud completato.");
+      } catch(e){
+        console.error(e);
+        setStatus("Errore export PF cloud");
+      }
+    });
+
+    /* admin crea utente */
+    document.getElementById("btnCreateUser").addEventListener("click", async () => {
+      const msg = document.getElementById("adminMsg");
+      msg.style.color = "#b00";
+      msg.textContent = "";
+
+      const u = document.getElementById("newUser").value.trim();
+      const p = document.getElementById("newPass").value;
+      const r = document.getElementById("newRole").value;
+
+      if(!u || !p){
+        msg.textContent = "Inserisci username e password.";
+        return;
+      }
+
+      try{
+        const res = await fetch(API_BASE + "/api/admin/create-user", {
+          method:"POST",
+          headers: authHeaders(),
+          body: JSON.stringify({ username: u, password: p, role: r })
+        });
+        const data = await res.json();
+
+        if(!res.ok){
+          msg.textContent = data?.error || "Errore creazione utente.";
+          return;
+        }
+
+        msg.style.color = "#060";
+        msg.textContent = `Creato: ${data.user.username} (${data.user.role})`;
+
+        document.getElementById("newUser").value = "";
+        document.getElementById("newPass").value = "";
+        document.getElementById("newRole").value = "user";
+      } catch(e){
+        console.error(e);
+        msg.textContent = "Errore di rete.";
+      }
+    });
+
+    (async () => {
+      await apiMe();
+      updateAuthUI();
+      await loadPFCloud();
+      if(session.role === "guest") showLogin();
+    })();
   </script>
 </body>
 </html>
