@@ -90,6 +90,11 @@
   <div id="coords-info">UTM32N -> X: - | Y: -</div>
 
   <div class="panel">
+    <!-- LOGIN / LOGOUT (sempre visibile) -->
+    <div class="row">
+      <button id="btnAuth">Login</button>
+    </div>
+
     <div class="row">
       <input id="qComune" placeholder="Cerca comune (es. Milano)" />
       <button id="btnComune">Vai</button>
@@ -128,6 +133,7 @@
 
     <div class="status" id="status"></div>
     <div class="small" id="userInfo"></div>
+
     <div class="small">
       I PF sono salvati automaticamente nel browser.<br>
       Linee e poligoni sono temporanei.
@@ -159,37 +165,22 @@
   </div>
 
   <script>
-  console.log("OL ok:", typeof ol, ol?.VERSION);
-
   /* =========================
-     CONFIG UTENTE / LOGIN
-     =========================
-     NOTA: questo è solo "gating" lato client.
-     Non è sicurezza vera: chi sa usare DevTools può aggirare.
-     Quando vorrai sicurezza reale: serve backend (Worker/D1/KV).
-  */
-
-  // >>>>> CONFIG: qui metti le credenziali che vuoi tu <<<<<
+     LOGIN (solo lato client)
+     ========================= */
   const USERS = [
-    { username: "admin", password: "cambia-questa-password", role: "admin" },
-    { username: "collab1", password: "pwd-collab1", role: "user" },
-    { username: "collab2", password: "pwd-collab2", role: "user" },
+    { username: "admin",   password: "cambia-questa-password", role: "admin" },
+    { username: "collab1", password: "pwd-collab1",            role: "user"  },
+    { username: "collab2", password: "pwd-collab2",            role: "user"  },
   ];
 
-  const SESSION_KEY = "catasto_session_v1"; // salva login sul browser
-  const session = {
-    mode: "guest",   // guest | auth
-    username: "Ospite",
-    role: "guest"    // guest | user | admin
-  };
+  const SESSION_KEY = "catasto_session_v1";
+  const session = { mode:"guest", username:"Ospite", role:"guest" };
 
-  function setSession(s){
-    session.mode = s.mode;
-    session.username = s.username;
-    session.role = s.role;
-    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-    updateUserUI();
-    applyPermissions();
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, (c) => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+    }[c]));
   }
 
   function loadSession(){
@@ -205,32 +196,40 @@
     } catch { return false; }
   }
 
-  const userInfoEl = document.getElementById("userInfo");
-  function updateUserUI(){
-    userInfoEl.innerHTML = `Utente: <b>${escapeHtml(session.username)}</b> <span class="pill">${escapeHtml(session.role)}</span>`;
+  function setSession(s){
+    session.mode = s.mode;
+    session.username = s.username;
+    session.role = s.role;
+    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    updateUserUI();
+    applyPermissions();
   }
 
-  function applyPermissions(){
-    const btnDelete = document.getElementById("btnDeletePF");
-    // elimina solo admin
-    btnDelete.disabled = (session.role !== "admin");
-    btnDelete.title = (session.role !== "admin") ? "Solo admin può eliminare PF" : "";
-  }
-
-  function escapeHtml(s){
-    return String(s).replace(/[&<>"']/g, (c) => ({
-      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
-    }[c]));
-  }
-
-  // Overlay login
   const overlay = document.getElementById("loginOverlay");
   const loginMsg = document.getElementById("loginMsg");
+  const userInfoEl = document.getElementById("userInfo");
+  const btnAuth = document.getElementById("btnAuth");
+
   function showLogin(){
+    document.getElementById("loginUser").value = "";
+    document.getElementById("loginPass").value = "";
+    loginMsg.textContent = "";
     overlay.style.display = "flex";
   }
   function hideLogin(){
     overlay.style.display = "none";
+  }
+
+  function updateUserUI(){
+    userInfoEl.innerHTML =
+      `Utente: <b>${escapeHtml(session.username)}</b> <span class="pill">${escapeHtml(session.role)}</span>`;
+    btnAuth.textContent = (session.role === "guest") ? "Login" : "Logout";
+  }
+
+  function applyPermissions(){
+    const btnDelete = document.getElementById("btnDeletePF");
+    btnDelete.disabled = (session.role !== "admin");
+    btnDelete.title = (session.role !== "admin") ? "Solo admin può eliminare PF" : "";
   }
 
   document.getElementById("btnGuest").addEventListener("click", () => {
@@ -250,7 +249,17 @@
     hideLogin();
   });
 
-  // init session
+  btnAuth.addEventListener("click", () => {
+    if(session.role === "guest"){
+      showLogin();
+      return;
+    }
+    if(confirm("Vuoi effettuare il logout?")){
+      localStorage.removeItem(SESSION_KEY);
+      setSession({ mode:"guest", username:"Ospite", role:"guest" });
+    }
+  });
+
   if(loadSession()){
     updateUserUI();
     applyPermissions();
@@ -261,18 +270,17 @@
   }
 
   /* =========================
-     PROIEZIONE EPSG:25832
+     OPENLAYERS
      ========================= */
+  console.log("OL ok:", typeof ol, ol?.VERSION);
+
   proj4.defs("EPSG:25832","+proj=utm +zone=32 +ellps=GRS80 +units=m +no_defs");
   ol.proj.proj4.register(proj4);
   const projection = ol.proj.get("EPSG:25832");
 
-  // Centro iniziale (Milano)
+  // Milano
   const center = ol.proj.transform([9.1900, 45.4642], "EPSG:4326", "EPSG:25832");
 
-  /* =========================
-     WMS Catasto
-     ========================= */
   const wmsLayer = new ol.layer.Tile({
     source: new ol.source.TileWMS({
       url: "https://catastovisual.princifranci.workers.dev/",
@@ -290,20 +298,13 @@
     })
   });
 
-  /* =========================
-     STATO UI
-     ========================= */
   const statusEl = document.getElementById("status");
   const coordsEl = document.getElementById("coords-info");
   function setStatus(msg){ statusEl.textContent = msg || ""; }
 
-  /* =========================
-     SELEZIONE / MODALITÀ PF
-     ========================= */
   const selectedIds = new Set();
   let pfMode = false;
   const btnModePF = document.getElementById("btnModePF");
-
   function updatePFButton(){
     btnModePF.textContent = `Modalità PF: ${pfMode ? "ON" : "OFF"}`;
   }
@@ -315,9 +316,12 @@
     setStatus(pfMode ? "Modalità inserimento PF attiva" : "Modalità inserimento PF disattiva");
   });
 
-  /* =========================
-     STILI PF (mostra autore)
-     ========================= */
+  function buildPFLabel(feature){
+    const name = feature.get("name") || "";
+    const by = feature.get("by") || "";
+    return by ? `${name} (${by})` : name;
+  }
+
   const pfStyle = (feature) => new ol.style.Style({
     image: new ol.style.Circle({
       radius: 6,
@@ -348,15 +352,6 @@
     })
   });
 
-  function buildPFLabel(feature){
-    const name = feature.get("name") || "";
-    const by = feature.get("by") || ""; // autore
-    return by ? `${name} (${by})` : name;
-  }
-
-  /* =========================
-     LAYER VETTORIALI
-     ========================= */
   const pfSource = new ol.source.Vector();
   const pfLayer = new ol.layer.Vector({ source: pfSource, style: pfStyle });
 
@@ -372,9 +367,6 @@
     })
   });
 
-  /* =========================
-     MAPPA
-     ========================= */
   const map = new ol.Map({
     target: "map",
     layers: [wmsLayer, tempLayer, pfLayer, selectedLayer],
@@ -393,9 +385,6 @@
     coordsEl.textContent = `UTM32N -> X: ${c[0].toFixed(2)} | Y: ${c[1].toFixed(2)}`;
   });
 
-  /* =========================
-     STORAGE PF
-     ========================= */
   const LS_KEY = "catasto_pf_v1";
 
   function loadPF(){
@@ -446,9 +435,6 @@
 
   loadPF();
 
-  /* =========================
-     SELEZIONE + INSERIMENTO PF
-     ========================= */
   function refreshSelection(){
     selectedSource.clear();
     for(const f of pfSource.getFeatures()){
@@ -477,7 +463,6 @@
 
     if(!pfMode) return;
 
-    // Guest non può creare PF (opzione tua). Se vuoi permetterlo, rimuovi questo blocco.
     if(session.role === "guest"){
       alert("Per inserire PF devi fare login (oppure crea un utente collaboratore).");
       return;
@@ -502,7 +487,6 @@
     setStatus("Selezione svuotata");
   });
 
-  // ELIMINA: solo admin (anche se qualcuno abilita il bottone via devtools, è comunque locale)
   document.getElementById("btnDeletePF").addEventListener("click", () => {
     if(session.role !== "admin"){
       alert("Solo admin può eliminare PF.");
@@ -554,9 +538,6 @@
     setStatus("Disegni temporanei rimossi.");
   });
 
-  /* =========================
-     CERCA COMUNE (Nominatim)
-     ========================= */
   document.getElementById("btnComune").addEventListener("click", async () => {
     const q = document.getElementById("qComune").value.trim();
     if(!q) return;
@@ -580,9 +561,6 @@
     }
   });
 
-  /* =========================
-     EXPORT / IMPORT PF
-     ========================= */
   document.getElementById("btnExport").addEventListener("click", () => {
     const data = localStorage.getItem(LS_KEY) || "[]";
     const blob = new Blob([data], {type: "application/json"});
