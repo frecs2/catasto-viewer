@@ -275,6 +275,12 @@
         crossOrigin: "anonymous"
       })
     });
+    // Mostra base a zoom bassi e dettaglio a zoom alti
+function updateWmsVisibility(){
+  const z = map.getView().getZoom();
+  baseWmsLayer.setVisible(z <= 15);
+  detailWmsLayer.setVisible(z >= 16);
+}
 
     function buildPFLabel(feature){
       const name = feature.get("name") || "";
@@ -305,7 +311,7 @@
       for(const key of sortedKeys){
         const [comune, foglio] = key.split("|");
         const list = groups.get(key);
-        html += `<div style="margin:6px 0 4px;"><b>${comune}</b> — Foglio <b>${foglio}</b> <span class="pill">${list.length}</span></div>`;
+        html += `<div style="margin:6px 0 4px;"><b>${escapeHtml(comune)}</b> — Foglio <b>${escapeHtml(foglio)}</b> <span class="pill">${list.length}</span></div>`;
         for(const f of list){
           const id = f.getId();
           const name = escapeHtml(f.get("name") || "");
@@ -343,10 +349,12 @@
 
     // CORREZIONE 2: Utilizzo dei layer corretti nell'inizializzazione
     const map = new ol.Map({
-      target: "map",
-      layers: [baseWmsLayer, detailWmsLayer, tempLayer, pfLayer, selectedLayer],
-      view: new ol.View({ projection, center, zoom: 17, minZoom: 6, maxZoom: 22 })
-    });
+  target: "map",
+  layers: [baseWmsLayer, detailWmsLayer, tempLayer, pfLayer, selectedLayer],
+  view: new ol.View({ projection, center, zoom: 17, minZoom: 6, maxZoom: 22 })
+});
+    updateWmsVisibility();
+map.getView().on("change:resolution", updateWmsVisibility);
 
     map.on("pointermove", (evt) => {
       if(evt.dragging) return;
@@ -370,14 +378,22 @@
         const res = await fetch(API_BASE + "/api/pf");
         const data = await res.json();
         const items = data?.items || [];
-        pfSource.clear(); selectedSource.clear(); selectedIds.clear();
-        for(const it of items){
-          const f = new ol.Feature({ geometry: new ol.geom.Point([Number(it.x), Number(it.y)]), name: String(it.name || ""), by: String(it.by || "") });
-          f.setId(it.id);
-          pfSource.addFeature(f);
-        }
-        renderPFList();
-        setStatus(`PF cloud: ${items.length}`);
+        pfSource.clear();
+selectedSource.clear();
+selectedIds.clear();
+
+for(const it of items){
+  const f = new ol.Feature({
+    geometry: new ol.geom.Point([Number(it.x), Number(it.y)]),
+    name: String(it.name || ""),
+    by: String(it.by || "")
+  });
+  f.setId(it.id);
+  pfSource.addFeature(f);
+}
+
+renderPFList();
+setStatus(`PF cloud: ${items.length}`);
       } catch(e){ setStatus("Errore caricamento."); }
     }
 
